@@ -377,8 +377,101 @@ svg {
   background: var(--red-9);
 }
 
-.is-listening .recording-dot {
+.is-recording .recording-dot {
   display: block;
+}
+
+.watch-unavailable {
+  font-size: 12px;
+  color: var(--gray-11);
+  max-width: 240px;
+}
+
+.watch-tools {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 0 20px 16px;
+}
+
+#watchChoose {
+  margin-inline: auto;
+}
+
+.watch-tools p {
+  margin-block: 8px;
+  color: var(--gray-11);
+  font-size: 13px;
+}
+
+.watch-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+#watchSource {
+  overflow-wrap: anywhere;
+}
+
+#watchTime {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.is-watching #demo,
+.is-watching #display {
+  display: none;
+}
+
+.pip-body {
+  background: rgba(16, 16, 18, .88);
+  color: #f4f4f4;
+  padding: 12px;
+  min-height: 100dvh;
+  overflow: auto;
+  --source-size: calc(22px * var(--scale));
+  --meaning-size: calc(15px * var(--scale));
+  --gray-10: #b4b4b4;
+  --gray-11: #c4c4c4;
+  --gray-a3: rgba(255, 255, 255, .08);
+  --gray-a4: rgba(255, 255, 255, .18);
+}
+
+.pip-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+}
+
+.pip-body .message {
+  background: transparent;
+  color: inherit;
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 4px;
+  animation: none;
+}
+
+.pip-body .message-translation,
+.pip-body .word-meaning,
+.pip-word {
+  color: color-mix(in srgb, var(--accent) 40%, white);
+}
+
+.pip-body .message-translation {
+  font-size: 17px;
+}
+
+.pip-word {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .1);
+  font-size: 16px;
 }
 
 main {
@@ -666,12 +759,15 @@ select option {
   display: none !important;
 }
 
-.phrase-layout .message-original {
-  gap: var(--space-1) .3em;
+.phrase-layout .message-original:has(.word-hint) {
+  display: block;
 }
 
 .phrase-layout .word-hint {
-  max-width: 100%;
+  display: inline;
+  min-width: 0;
+  max-width: none;
+  text-align: start;
 }
 
 .message-translation {
@@ -1314,7 +1410,7 @@ textarea {
     border-top: 1px solid var(--line);
     padding-bottom: env(safe-area-inset-bottom);
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: 0;
   }
 
@@ -1441,6 +1537,16 @@ textarea {
     padding-bottom: 0;
   }
 
+}
+
+@media (pointer: coarse) and (width < 768px) {
+  #watchTab, #watchUnavailable {
+    display: none;
+  }
+
+  .tabs {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

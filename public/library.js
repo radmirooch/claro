@@ -92,6 +92,12 @@ export function renderLibrary() {
   if (selected) {
     $('libraryTitle').textContent = conversationTitle(selected);
     $('libraryContinue').hidden = !currentSession(selected);
+    const watchUnavailable = selected.kind === 'watch' &&
+      (!navigator.mediaDevices?.getDisplayMedia ||
+        window.matchMedia?.('(pointer: coarse) and (width < 768px)').matches);
+    $('libraryContinue').disabled = Boolean(watchUnavailable);
+    $('libraryContinue').title = watchUnavailable
+      ? 'Звук вкладки работает в Chrome и Edge на компьютере' : '';
     renderMessages(savedTurns, $('libraryMessages'), savedRows, { readOnly: true });
     return;
   }
@@ -284,7 +290,7 @@ export function initializeLibrary() {
   $('libraryBack').onclick = openLibrary;
   $('libraryContinue').onclick = () => {
     if (selected && currentSession(selected))
-      setPanel('reader');
+      setPanel(selected.kind === 'watch' ? 'watch' : 'reader');
   };
   $('libraryRename').onclick = () => {
     $('libraryName').value = selected.title || '';

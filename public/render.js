@@ -7,6 +7,7 @@ import { assignSpeaker } from './participants.js';
 import { renderHistory, peekWord, revealMessage } from './render-history.js';
 import { requestTranslation } from './translation-jobs.js';
 import { requestGloss } from './gloss-jobs.js';
+import { renderWatch, renderPip } from './watch.js';
 
 export function readingAnchor(feed) {
   const bounds = feed.getBoundingClientRect?.();
@@ -48,13 +49,18 @@ export function renderConversation() {
   const anchor = state.followConversation ? null : readingAnchor(feed);
   document.body.setAttribute('data-text-size', $('textSize').value || 'normal');
   const steady = $('readingMode').value !== 'live';
-  const all = [...state.messages.values()],
+  const viewingWatch = state.panel === 'watch';
+  const matchingKind = state.sessionKind === (viewingWatch ? 'watch' : 'conversation');
+  const all = matchingKind ? [...state.messages.values()] : [],
     draft = steady ? all.filter(event => event.final === false).at(-1) : null;
   $('draftPanel').hidden = !draft || ($('showOriginal').value === 'hide' && mode !== 'off');
   $('draftText').textContent = draft ? draftTail(draft.text) : '';
   const modelsMissing = recognitionMissing(state.config);
   $('emptyState').hidden = all.length > 0;
-  $('emptyTitle').textContent = modelsMissing ? 'Модели не установлены' : 'Начните разговор';
+  $('emptyTitle').textContent = viewingWatch
+    ? 'Выберите, что смотреть'
+    : modelsMissing ? 'Модели не установлены' : 'Начните разговор';
+  $('demo').hidden = viewingWatch;
   $('setupHelp').hidden = !modelsMissing;
   renderMessages(all.filter(event => !steady || event.final !== false), list, state.messageRows);
   $('translationNotice').textContent = 'Перевод недоступен';
@@ -64,9 +70,11 @@ export function renderConversation() {
   else
     restoreReadingAnchor(feed, anchor);
   $('jumpLatest').hidden = state.followConversation || !state.messages.size;
+  renderWatch();
+  renderPip();
 }
 
-export function renderMessages(events, list, rows, { readOnly = false } = {}) {
+export function renderMessages(events, list, rows, { readOnly = false, compact = false, onPeek } = {}) {
   const mode = readOnly ? 'always' : $('translationMode').value;
   const words = $('translationLayout').value === 'words';
   const blocks = messengerBlocks(events),
@@ -140,7 +148,7 @@ export function renderMessages(events, list, rows, { readOnly = false } = {}) {
       row.removeAttribute?.('aria-expanded');
     }
     const profile = state.participants.find(p => p.id === event.speaker_id);
-    const speakers = $('showParticipants').value === 'show';
+    const speakers = !compact && $('showParticipants').value === 'show';
     row.setAttribute('data-speaker-color', speakers ? profile?.color || 'unknown' : 'unknown');
     row.classList.toggle('self-message', event.speaker_id === 'self');
     const meta = document.createElement('div');
@@ -189,22 +197,24 @@ export function renderMessages(events, list, rows, { readOnly = false } = {}) {
     const inlineHints = interlinear;
     const original = document.createElement('p');
     original.className = 'message-original';
-    if (interlinear || readOnly)
-      renderAnnotated(original, event.text, displayedGlosses, event.target_language, {
-        concealed: readOnly && !interlinear ? true : concealed,
-        maxGlossLength: readOnly ? 300 : undefined,
-        selectedIndex: state.wordPeek?.id === event.id ? state.wordPeek.index : null,
-        onPeek: (index, anchor) => {
-          if (readOnly)
-            peekWord(event.parts[0], index, anchor, true);
-          else if (mode === 'tap' && concealed)
-            revealMessage(event);
-          else
-            peekWord(event.parts[0], (event.sourceOffset || 0) + index, anchor);
+    renderAnnotated(original, event.text, interlinear ? displayedGlosses : event.glosses, event.target_language, {
+      phraseLayout: !interlinear,
+      concealed: !interlinear || concealed,
+      maxGlossLength: readOnly ? 300 : undefined,
+      selectedIndex: state.wordPeek?.id === event.id ? state.wordPeek.index : null,
+      onPeek: (index, anchor) => {
+        if (onPeek)
+          onPeek(event.parts[0], index, anchor);
+        else if (readOnly)
+          peekWord(event.parts[0], index, anchor, true);
+        else if (mode === 'tap' && concealed) {
+          peekWord(event.parts[0], index, anchor);
+          revealMessage(event);
         }
-      });
-    else
-      original.textContent = event.text;
+        else
+          peekWord(event.parts[0], (event.sourceOffset || 0) + index, anchor);
+      }
+    });
     original.hidden =
       !readOnly &&
       $('showOriginal').value === 'hide' &&
@@ -254,7 +264,7 @@ export function renderMessages(events, list, rows, { readOnly = false } = {}) {
       const actions = document.createElement('div');
       actions.className = 'message-actions';
       if (
-        !readOnly &&
+        !readOnly && !compact &&
         (mode !== 'peek' || event.translation_status === 'error') &&
         event.final !== false &&
         (!event.translation ||
@@ -290,7 +300,7 @@ export function renderMessages(events, list, rows, { readOnly = false } = {}) {
         actions.append(button);
       }
       if (
-        !readOnly &&
+        !readOnly && !compact &&
         words &&
         visible &&
         event.translation &&

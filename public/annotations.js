@@ -59,6 +59,7 @@ export function renderAnnotated(container, text, glosses, targetLanguage, option
   const spans = validateGlosses(text, glosses, options.maxGlossLength);
   const units = sourceUnits(text);
   let renderedSpan = null;
+  let previousEnd = 0;
   for (const unit of units) {
     const span = spans.find(span => span.start < unit.end && span.end > unit.start);
     if (span && span === renderedSpan)
@@ -69,6 +70,9 @@ export function renderAnnotated(container, text, glosses, targetLanguage, option
     const original = document.createElement(options.onPeek ? 'button' : 'span');
     original.className = 'word-source';
     const coveredUnits = span ? units.filter(item => item.start < span.end && item.end > span.start) : [unit];
+    if (options.phraseLayout && coveredUnits[0].start > previousEnd)
+      container.append(document.createTextNode(text.slice(previousEnd, coveredUnits[0].start)));
+    previousEnd = coveredUnits.at(-1).end;
     original.textContent = text.slice(coveredUnits[0].start, coveredUnits.at(-1).end);
     if (span && /\s/u.test(span.source))
       group.className += ' expression';
@@ -111,6 +115,8 @@ export function renderAnnotated(container, text, glosses, targetLanguage, option
     group.append(original, meaning);
     container.append(group);
   }
+  if (options.phraseLayout && previousEnd < text.length)
+    container.append(document.createTextNode(text.slice(previousEnd)));
 }
 
 // Unit identities depend only on the source, independently of translated meanings.

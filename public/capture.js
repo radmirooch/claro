@@ -8,6 +8,8 @@ import { post, requestTranslation } from './translation-jobs.js';
 import { drainGlosses } from './gloss-jobs.js';
 import { show, remember, removeDemo, showTranslation } from './render-history.js';
 import { renderConversation } from './render.js';
+import { initializePersistence, newConversation } from './persistence.js';
+import { renderWatch } from './watch.js';
 
 export function acceptFinal(event) {
   const chunks = splitFinalCaption(event);
@@ -21,10 +23,15 @@ export function acceptFinal(event) {
   }
 }
 
-export async function drain() {
+export function drain() {
   if (state.processing)
-    return;
+    return state.captureDrain;
   state.processing = true;
+  state.captureDrain = drainQueue();
+  return state.captureDrain;
+}
+
+async function drainQueue() {
   try {
     while (state.queue.length) {
       const job = state.queue.shift();
@@ -45,6 +52,7 @@ export async function drain() {
         event.target_language = job.target;
         event.sequence = job.sequence;
         event.capture_session = job.capture_session;
+        event.input = job.input;
         event.start_seconds = job.start_seconds;
         event.speech_end_seconds = job.speech_end_seconds;
         event.end_reason = job.end_reason;
@@ -101,14 +109,15 @@ export async function drain() {
 }
 
 export function controls() {
-  document.body.classList.toggle('is-listening', state.running);
-  $('listenLabel').textContent = state.starting
+  const microphoneRunning = state.running && state.captureSource === 'mic';
+  document.body.classList.toggle('is-listening', microphoneRunning);
+  $('listenLabel').textContent = state.starting && state.captureSource === 'mic'
     ? 'Включаем микрофон…'
-    : state.running
+    : microphoneRunning
       ? 'Стоп'
       : 'Слушать';
-  $('listen').classList.toggle('active', state.running);
-  $('listen').disabled = state.starting || (!state.running && !state.liveReady);
+  $('listen').classList.toggle('active', microphoneRunning);
+  $('listen').disabled = state.starting || (!microphoneRunning && !state.liveReady);
   for (const id of [
     'language',
     'targetLanguage',
@@ -127,6 +136,7 @@ export function controls() {
     state.running ||
     !state.config ||
     (!state.config.translator && $('language').value !== $('targetLanguage').value);
+  renderWatch();
 }
 
 export function stop() {
@@ -139,40 +149,88 @@ export function stop() {
   state.source?.disconnect();
   state.capture?.disconnect();
   state.silent?.disconnect();
-  state.stream?.getTracks().forEach(t => t.stop());
+  state.stream?.getTracks().forEach(track => {
+    track.onended = null;
+    track.stop();
+  });
   state.context?.close().catch(() => {});
   state.source = state.capture = state.silent = state.stream = state.context = null;
   $('meter').value = 0;
   controls();
   showTranslation();
-  status('Микрофон выключен');
+  status(state.captureSource === 'display' ? 'Просмотр остановлен' : 'Микрофон выключен');
 }
 
-export async function start() {
-  if (state.running)
-    return stop();
+export async function start({ source = 'mic' } = {}) {
   if (state.starting)
     return;
+  if (state.running && state.captureSource === source)
+    return stop();
+  if (!['mic', 'display'].includes(source))
+    return;
+  if (state.running)
+    stop();
   removeDemo();
   state.current = null;
   state.lastTranslated = null;
   $('mode').textContent = 'Живые субтитры';
   showTranslation();
   state.starting = true;
+  state.captureSource = source;
+  state.watchError = '';
   controls();
   const epoch = ++state.generation;
+  let openedStream;
   try {
-    if (!navigator.mediaDevices?.getUserMedia)
+    if (source === 'display' && !navigator.mediaDevices?.getDisplayMedia)
+      throw new Error('Звук вкладки работает в Chrome и Edge на компьютере');
+    if (source === 'mic' && !navigator.mediaDevices?.getUserMedia)
       throw new Error('Микрофон требует localhost или HTTPS.');
-    const openedStream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-      video: false
-    });
+    openedStream = source === 'display'
+      ? await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: { suppressLocalAudioPlayback: false, echoCancellation: false, noiseSuppression: false },
+          systemAudio: 'include',
+          selfBrowserSurface: 'exclude',
+          surfaceSwitching: 'include'
+        })
+      : await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+          video: false
+        });
+    if (source === 'display')
+      openedStream.getVideoTracks().forEach(track => track.stop());
     if (epoch !== state.generation) {
       openedStream.getTracks().forEach(t => t.stop());
       return;
     }
+    const audioTrack = openedStream.getAudioTracks()[0];
+    if (!audioTrack)
+      throw new Error('В выбранном источнике нет звука. Отметьте „Поделиться звуком“');
+    audioTrack.onended = () => {
+      if (epoch === state.generation)
+        stop();
+    };
+    if (source === 'display')
+      await audioTrack.applyConstraints?.({ echoCancellation: false, noiseSuppression: false });
+    await initializePersistence();
+    const kind = source === 'display' ? 'watch' : 'conversation';
+    if (epoch !== state.generation)
+      return;
+    if (state.sessionKind !== kind) {
+      await state.captureDrain;
+      if (epoch !== state.generation)
+        return;
+      if (await newConversation({ preserveCapture: true }) === false)
+        throw new Error('Не удалось завершить текущий разговор. Попробуйте снова.');
+      if (epoch !== state.generation)
+        return;
+      state.sessionKind = kind;
+    }
+    if (audioTrack.readyState === 'ended')
+      throw new Error('Показ источника завершён. Выберите вкладку заново.');
     state.stream = openedStream;
+    state.captureLabel = source === 'display' ? audioTrack.label || 'Звук вкладки' : 'Микрофон';
     const openedContext = new AudioContext();
     state.context = openedContext;
     await openedContext.resume();
@@ -185,7 +243,7 @@ export async function start() {
     const phrases = new LiveBuffer(
       state.context.sampleRate,
       Number($('interval').value),
-      Number($('threshold').value),
+      source === 'display' ? 0.006 : Number($('threshold').value),
       8,
       Number($('sentencePause').value || 1.2)
     );
@@ -201,7 +259,8 @@ export async function start() {
       language: $('language').value,
       target: $('targetLanguage').value,
       engine: $('engine').value,
-      interval: Number($('interval').value)
+      interval: Number($('interval').value),
+      input: source
     };
     const viewEpoch = state.transcriptEpoch,
       rate = state.context.sampleRate;
@@ -230,15 +289,24 @@ export async function start() {
       $('meter').value = rms;
       submit(update);
     };
-    state.stream.getAudioTracks()[0].onended = () => stop();
   } catch (e) {
+    if (epoch !== state.generation)
+      return;
     stop();
-    status(
-      e.name === 'NotAllowedError'
-        ? 'Доступ к микрофону не разрешён. Разреши его в браузере.'
-        : e.message
-    );
+    const message = e.name === 'NotAllowedError'
+      ? source === 'display'
+        ? 'Выбор источника отменён. Выберите вкладку снова.'
+        : 'Доступ к микрофону не разрешён. Разреши его в браузере.'
+      : e.message;
+    if (source === 'display')
+      state.watchError = message;
+    status(message);
   } finally {
+    if (openedStream && openedStream !== state.stream)
+      openedStream.getTracks().forEach(track => {
+        track.onended = null;
+        track.stop();
+      });
     state.starting = false;
     controls();
     renderConversation();

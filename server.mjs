@@ -31,6 +31,7 @@ const assets = {
   '/translation-jobs.js': ['translation-jobs.js', 'text/javascript'],
   '/gloss-jobs.js': ['gloss-jobs.js', 'text/javascript'],
   '/capture.js': ['capture.js', 'text/javascript'],
+  '/watch.js': ['watch.js', 'text/javascript'],
   '/readiness.js': ['readiness.js', 'text/javascript'],
   '/settings.js': ['settings.js', 'text/javascript'],
   '/persistence.js': ['persistence.js', 'text/javascript'],

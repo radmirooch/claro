@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
 import {sourceUnits} from '../public/annotations.js';
 
-async function harness({live=false,streaming=false,glossStreaming=false,sessions=false,activeSession=null,preferences={},sessionResponder,confirmDelete=true,configOverride={},clipboard} = {}) {
+async function harness({live=false,streaming=false,glossStreaming=false,sessions=false,activeSession=null,preferences={},sessionResponder,confirmDelete=true,configOverride={},clipboard,getDisplayMedia,getUserMedia,pip=false,matchMedia} = {}) {
   const elements = new Map();
   const windowListeners = new Map();
   function createClassList() {
@@ -27,7 +27,7 @@ async function harness({live=false,streaming=false,glossStreaming=false,sessions
   }
 
   const element = id => {
-    if (!elements.has(id)) elements.set(id,{value:'',_text:'',get textContent(){return this.children.length ? this.children.map(n=>n.textContent).join('') : this._text;},set textContent(v){this._text=v;this.children=[];},hidden:false,disabled:false,options:[],children:[],attributes:{},scrollTop:0,scrollHeight:1000,clientHeight:400,classList:createClassList(),add(option){this.options.push(option);},append(...items){for(const item of items){item.parent=this;this.children.push(item);}},remove(){if(this.parent)this.parent.children=this.parent.children.filter(x=>x!==this);},replaceChildren(){this.children=[];},setAttribute(k,v){this.attributes[k]=v;},showModal(){},close(){}});
+    if (!elements.has(id)) elements.set(id,{value:'',_text:'',get textContent(){return this.children.length ? this.children.map(n=>n.textContent).join('') : this._text;},set textContent(v){this._text=v;this.children=[];},hidden:false,disabled:false,options:[],children:[],attributes:{},scrollTop:0,scrollHeight:1000,clientHeight:400,classList:createClassList(),add(option){this.options.push(option);},append(...items){for(const item of items){item.parent=this;this.children.push(item);}},remove(){if(this.parent)this.parent.children=this.parent.children.filter(x=>x!==this);},replaceChildren(...items){this.children=[];this.append(...items);},setAttribute(k,v){this.attributes[k]=v;},showModal(){},close(){}});
     elements.get(id).classList.owner = elements.get(id);
     return elements.get(id);
   };
@@ -38,11 +38,31 @@ async function harness({live=false,streaming=false,glossStreaming=false,sessions
   element('historyPanel').hidden=true;
   const requests=[], pending=[];
   const sessionRequests = [];
+  const transcriptions = [];
+  const pipListeners = new Map();
+  const pipRequests = [];
+  const root = element('documentRoot');
+  root.getAttribute = name => root.attributes[name];
+  root.setAttribute('data-theme', preferences.theme || 'light');
+  root.setAttribute('data-palette', preferences.palette || 'graphite');
+  const pipWindow = {
+    closed: false,
+    document: {
+      documentElement: element('pipRoot'),
+      head: element('pipHead'),
+      body: element('pipBody'),
+      createElement: () => element('pipNode' + Math.random()),
+      addEventListener(type, listener) { pipListeners.set(type, listener); }
+    },
+    addEventListener(type, listener) { pipListeners.set(type, listener); },
+    scrollTo() {},
+    focus() {}
+  };
   const context = vm.createContext({console,structuredClone,TextDecoder,URL,URLSearchParams,Blob,AbortSignal,AbortController,performance,crypto:webcrypto,
     Option:class {constructor(label,value){this.label=label;this.value=value;}},
-    document:{getElementById:element,createElement:()=>element('node'+Math.random()),createTextNode:text=>({textContent:text}),body:{classList:{toggle(){}},setAttribute(){}}},
-    localStorage:{getItem:key=>key==='claro.preferences.v1'?JSON.stringify(preferences):null,setItem(){}},confirm:()=>confirmDelete,window:{addEventListener(type, listener){windowListeners.set(type, listener);}},setInterval(){},setTimeout,
-    navigator:{clipboard,mediaDevices:{getUserMedia:async()=>({getTracks:()=>[{stop(){}}],getAudioTracks:()=>[{}]})}},
+    document:{documentElement:root,querySelectorAll:()=>[{href:'http://127.0.0.1:4317/style.css'}],getElementById:element,createElement:()=>element('node'+Math.random()),createTextNode:text=>({textContent:text}),body:{classList:{toggle(){}},setAttribute(){}}},
+    localStorage:{getItem:key=>key==='claro.preferences.v1'?JSON.stringify(preferences):null,setItem(){}},confirm:()=>confirmDelete,window:{matchMedia,documentPictureInPicture:pip ? {async requestWindow(options){pipRequests.push(options);return pipWindow;}} : undefined,addEventListener(type, listener){windowListeners.set(type, listener);}},setInterval(){},setTimeout,
+    navigator:{clipboard,mediaDevices:{getDisplayMedia,getUserMedia:getUserMedia || (async()=>({getTracks:()=>[{stop(){}}],getAudioTracks:()=>[{}]}))}},
     AudioContext:class {constructor(){this.sampleRate=16000;this.audioWorklet={addModule:async()=>{}};} async resume(){} close(){return Promise.resolve();} createMediaStreamSource(){return {connect(node){return node;},disconnect(){}};} createGain(){return {gain:{},connect(){},disconnect(){}};}},
     AudioWorkletNode:class {constructor(){this.port={};}connect(node){return node;}disconnect(){}},
     fetch:async(path,options)=>{
@@ -61,6 +81,7 @@ async function harness({live=false,streaming=false,glossStreaming=false,sessions
         return {ok:true,json:async()=>result};
       }
       if(path.startsWith('/api/transcribe')) {
+        transcriptions.push({path, audio:options.body});
         const p=new URL(path,'http://localhost').searchParams;
         return {ok:true,json:async()=>({id:p.get('caption_id'),revision:Number(p.get('revision')),final:p.get('final')==='true',source_language:'es',text:'Texto '+p.get('caption_id')+' '+p.get('revision')+(p.get('final')==='true'?'.':''),audio_seconds:options.body.byteLength/32000,created_at:new Date().toISOString(),processing_ms:10,engine:'qwen'})};
       }
@@ -125,7 +146,7 @@ async function harness({live=false,streaming=false,glossStreaming=false,sessions
   const settle=()=>new Promise(resolve=>setImmediate(resolve)); await settle();
   async function feed(frames,volume=.05){for(let i=0;i<frames;i++)run(`capture.port.onmessage({data:new Float32Array(1600).fill(${volume})})`);await settle();}
   async function release(path){const index=path ? pending.findIndex(item=>item.path===path) : 0;assert.ok(index>=0 && pending.length,'model request pending');pending.splice(index,1)[0]();await settle();}
-  return {element,run,feed,release,settle,requests,pending,sessionRequests,windowListeners};
+  return {element,run,feed,release,settle,requests,pending,sessionRequests,windowListeners,transcriptions,pipWindow,pipListeners,pipRequests};
 }
 
 test('conversation keeps successive captions and attaches delayed FIFO translations after microphone stop',async()=>{
@@ -1073,4 +1094,372 @@ test('application installation uses the browser prompt and reports the supported
   assert.equal(h.element('appInstallHint').textContent, 'Установка Claro запрошена');
   h.windowListeners.get('appinstalled')();
   assert.equal(h.element('appInstallHint').textContent, 'Claro установлено как приложение');
+});
+
+function displayFixture({ audio = true } = {}) {
+  const audioTrack = {
+    label: 'Учебное видео',
+    readyState: 'live',
+    stops: 0,
+    constraints: [],
+    async applyConstraints(value) {
+      this.constraints.push(value);
+    },
+    stop() {
+      this.stops++;
+      this.readyState = 'ended';
+    }
+  };
+  const videoTrack = {
+    stops: 0,
+    stop() {
+      this.stops++;
+    }
+  };
+  const stream = {
+    getAudioTracks: () => audio ? [audioTrack] : [],
+    getVideoTracks: () => [videoTrack],
+    getTracks: () => audio ? [audioTrack, videoTrack] : [videoTrack]
+  };
+  const choices = [];
+  return {
+    stream, audioTrack, videoTrack, choices,
+    async getDisplayMedia(options) {
+      choices.push(options);
+      return stream;
+    }
+  };
+}
+
+test('display capture uses the shared WAV and ASR pipeline, a quiet fixed threshold and watch storage', async () => {
+  const fixture = displayFixture();
+  const h = await harness({getDisplayMedia:fixture.getDisplayMedia,sessions:true});
+  h.element('threshold').value = '0.025';
+  h.element('watchTab').onclick();
+  assert.equal(h.element('emptyTitle').textContent, 'Выберите, что смотреть');
+  assert.equal(h.element('listen').hidden, true);
+  await h.run("start({source:'display'})");
+  assert.equal(h.run('running'), true);
+  assert.equal(fixture.videoTrack.stops, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(fixture.choices[0])), {
+    video:true,
+    audio:{suppressLocalAudioPlayback:false,echoCancellation:false,noiseSuppression:false},
+    systemAudio:'include',selfBrowserSurface:'exclude',surfaceSwitching:'include'
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(fixture.audioTrack.constraints)), [{echoCancellation:false,noiseSuppression:false}]);
+  await h.feed(15, 0.009);
+  await h.feed(13, 0);
+  assert.ok(h.transcriptions.length >= 2);
+  assert.equal(new TextDecoder().decode(h.transcriptions[0].audio.slice(0, 4)), 'RIFF');
+  assert.equal(h.run('current.input'), 'display');
+  assert.equal(h.run('current.final'), true);
+  assert.match(h.element('messageList').textContent, /Texto/);
+  const created = h.sessionRequests.find(request => request.method === 'POST');
+  assert.equal(created.input.kind, 'watch');
+  assert.equal(h.element('watchSource').textContent, 'Учебное видео');
+  h.run('updateRecordingIndicator(1000); updateRecordingIndicator(66000)');
+  assert.equal(h.element('watchTime').textContent, '01:05');
+  h.element('watchStop').onclick();
+  assert.equal(h.run('running'), false);
+});
+
+test('a display source without audio stops its video and offers another choice without starting capture', async () => {
+  const fixture = displayFixture({audio:false});
+  const h = await harness({getDisplayMedia:fixture.getDisplayMedia,sessions:true});
+  h.element('watchTab').onclick();
+  await h.element('watchChoose').onclick();
+  assert.equal(h.run('running'), false);
+  assert.equal(h.run('starting'), false);
+  assert.ok(fixture.videoTrack.stops > 0);
+  assert.equal(h.element('watchError').textContent, 'В выбранном источнике нет звука. Отметьте „Поделиться звуком“');
+  assert.equal(h.element('watchChoose').textContent, 'Выбрать заново');
+  assert.equal(h.element('watchChoose').disabled, false);
+  assert.equal(h.transcriptions.length, 0);
+  assert.equal(h.sessionRequests.some(request => request.method === 'POST'), false);
+});
+
+test('ending display audio flushes the final phrase and disposes capture like stop', async () => {
+  const fixture = displayFixture();
+  const h = await harness({getDisplayMedia:fixture.getDisplayMedia});
+  await h.run("start({source:'display'})");
+  await h.feed(15);
+  const id = h.run('current.id');
+  const ended = fixture.audioTrack.onended;
+  fixture.audioTrack.readyState = 'ended';
+  ended();
+  await h.settle();
+  assert.equal(h.run('running'), false);
+  assert.equal(h.run('capture'), null);
+  assert.equal(h.run('stream'), null);
+  assert.equal(h.run('history[0].id'), id);
+  assert.equal(h.run('history[0].final'), true);
+  await h.run('start()');
+  ended();
+  assert.equal(h.run('running'), true, 'a stale ended callback cannot stop another source');
+  h.run('stop()');
+});
+
+test('switching between microphone and display ends the old session after its final ASR write', async () => {
+  const fixture = displayFixture();
+  const h = await harness({getDisplayMedia:fixture.getDisplayMedia,sessions:true});
+  await h.run('start()');
+  await h.feed(15);
+  const oldId = h.run('current.id');
+  await h.run("start({source:'display'})");
+  assert.equal(h.run('running'), true);
+  assert.equal(h.run('captureSource'), 'display');
+  assert.equal(h.run('messages.has("' + oldId + '")'), false);
+  const ending = h.sessionRequests.findIndex(request => request.method === 'PATCH');
+  const oldWrite = h.sessionRequests.findIndex(request => request.method === 'PUT' && request.path.endsWith(oldId));
+  assert.ok(oldWrite >= 0 && oldWrite < ending);
+  await h.feed(15);
+  await h.feed(13, 0);
+  assert.deepEqual(h.sessionRequests.filter(request => request.method === 'POST').map(request => request.input.kind), ['conversation','watch']);
+  await h.run('start()');
+  assert.equal(fixture.audioTrack.readyState, 'ended');
+  assert.equal(h.run('captureSource'), 'mic');
+  assert.equal(h.run('sessionKind'), 'conversation');
+  await h.feed(15);
+  await h.feed(13, 0);
+  assert.deepEqual(h.sessionRequests.filter(request => request.method === 'POST').map(request => request.input.kind), ['conversation','watch','conversation']);
+  h.run('stop()');
+});
+
+test('unsupported display and PiP show their reasons and coarse phones hide the watch section', async () => {
+  const h = await harness();
+  assert.equal(h.element('watchTab').disabled, true);
+  assert.equal(h.element('watchUnavailable').hidden, false);
+  assert.equal(h.element('watchUnavailable').textContent, 'Звук вкладки работает в Chrome и Edge на компьютере');
+  h.element('watchTab').onclick();
+  assert.equal(h.run('panel'), 'reader');
+  assert.equal(h.element('watchPip').hidden, true);
+  assert.equal(h.element('pipUnavailable').textContent, 'Окно поверх видео работает в Chrome и Edge');
+  const phone = await harness({getDisplayMedia:displayFixture().getDisplayMedia,
+    matchMedia:() => ({matches:true,addEventListener(){}})});
+  assert.equal(phone.element('watchTab').hidden, true);
+});
+
+test('cancelled and stale display choices release tracks and leave capture available for retry', async () => {
+  const h = await harness({getDisplayMedia:async () => { throw Object.assign(new Error(), {name:'NotAllowedError'}); }});
+  h.element('watchTab').onclick();
+  await h.element('watchChoose').onclick();
+  assert.equal(h.run('running'), false);
+  assert.match(h.element('watchError').textContent, /Выбор источника отменён/);
+  assert.equal(h.element('watchChoose').disabled, false);
+  const fixture = displayFixture();
+  let resolveChoice;
+  const late = await harness({getDisplayMedia:() => new Promise(resolve => { resolveChoice = resolve; })});
+  const starting = late.run("start({source:'display'})");
+  late.run('stop()');
+  resolveChoice(fixture.stream);
+  await starting;
+  assert.equal(late.run('running'), false);
+  assert.equal(fixture.audioTrack.readyState, 'ended');
+});
+
+test('every live word click publishes a lookup record in phrase and word layouts, including repeated clicks', async () => {
+  const h = await harness();
+  await h.run('start()');
+  h.run(`
+    window.lookups = [];
+    moduleBus.subscribe('lookup', record => window.lookups.push(record));
+    show({id:'lookup-turn',text:'Una mesa.',source_language:'es',target_language:'ru',final:true,
+      translation:'Стол.',gloss_status:'ready',glosses:[{index:0,source:'Una',meaning:'одна'}]});
+  `);
+  const original = h.element('messageList').children[0].children[0];
+  original.children[0].children[0].onclick();
+  original.children[0].children[0].onclick();
+  await h.settle();
+  const record = JSON.parse(h.run('JSON.stringify(window.lookups[0])'));
+  assert.deepEqual({...record,at:undefined}, {
+    caption_id:'lookup-turn',index:0,source:'Una',meaning:'одна',source_language:'es',target_language:'ru',at:undefined
+  });
+  assert.ok(Number.isFinite(Date.parse(record.at)));
+  assert.equal(h.run('window.lookups.length'), 2);
+  h.element('translationLayout').value = 'words';
+  h.run('renderConversation()');
+  h.element('messageList').children[0].children[0].children[0].children[1].onclick();
+  await h.settle();
+  assert.equal(h.run('window.lookups.length'), 3);
+  assert.equal(h.run("MODULES.find(module => module.id === 'lookups').available"), true);
+  h.run('stop()');
+  h.element('messageList').children[0].children[0].children[0].children[0].onclick();
+  await h.settle();
+  assert.equal(h.run('window.lookups.length'), 3);
+});
+
+test('PiP copies linked styles and appearance, renders the latest records and handles word lookup locally', async () => {
+  const fixture = displayFixture();
+  const h = await harness({getDisplayMedia:fixture.getDisplayMedia,pip:true,preferences:{theme:'dark',palette:'sage'}});
+  h.element('watchTab').onclick();
+  await h.element('watchChoose').onclick();
+  h.run(`
+    window.lookups = [];
+    moduleBus.subscribe('lookup', record => window.lookups.push(record));
+    for (let index = 0; index < 5; index++)
+      show({id:'pip-'+index,text:'Una mesa.',source_language:'es',target_language:'ru',final:true,
+        translation:'Стол.',gloss_status:'ready',glosses:[{index:0,source:'Una',meaning:'одна'}]});
+    show({id:'pip-draft',text:'Otra frase',source_language:'es',target_language:'ru',final:false},false);
+  `);
+  await h.element('watchPip').onclick();
+  const doc = h.pipWindow.document;
+  assert.deepEqual(JSON.parse(JSON.stringify(h.pipRequests)), [{width:480,height:220}]);
+  assert.equal(doc.head.children.length, 1);
+  assert.equal(doc.head.children[0].rel, 'stylesheet');
+  assert.equal(doc.head.children[0].href, 'http://127.0.0.1:4317/style.css');
+  assert.equal(doc.documentElement.attributes['data-theme'], 'dark');
+  assert.equal(doc.documentElement.attributes['data-palette'], 'sage');
+  const list = doc.body.children[0];
+  assert.deepEqual(list.children.map(row => row.attributes['data-caption-id']), ['pip-2','pip-3','pip-4','pip-draft']);
+  const first = list.children[0];
+  const word = first.children[0].children[0].children[0];
+  word.onclick();
+  assert.equal(first.children.at(-1).className, 'pip-word');
+  assert.equal(first.children.at(-1).textContent, 'одна');
+  await h.settle();
+  assert.equal(h.run('window.lookups[0].caption_id'), 'pip-2');
+  assert.equal(h.run('wordPeek'), null);
+  word.onclick();
+  assert.equal(first.children.some(node => node.className === 'pip-word'), false);
+  word.onclick();
+  h.pipListeners.get('keydown')({key:'Escape'});
+  assert.equal(first.children.some(node => node.className === 'pip-word'), false);
+  h.run(`messages.get('pip-4').translation = 'Новый перевод'; renderConversation()`);
+  assert.match(list.textContent, /Новый перевод/);
+  h.element('translationLayout').value = 'words';
+  h.run('renderConversation()');
+  assert.equal(list.children[0].children[0].children[0].children[1].hidden, false);
+  h.pipListeners.get('pagehide')();
+  assert.equal(h.run('running'), true);
+  await h.feed(15);
+  assert.ok(h.transcriptions.length > 0);
+  h.run('stop()');
+});
+
+test('microphone and display encode identical PCM through the same worklet path', async () => {
+  const fixture = displayFixture();
+  let microphoneOptions;
+  const microphone = await harness({getUserMedia:async options => {
+    microphoneOptions = options;
+    return {getTracks:() => [{stop(){}}],getAudioTracks:() => [{}]};
+  }});
+  const display = await harness({getDisplayMedia:fixture.getDisplayMedia});
+  await microphone.run('start()');
+  await display.run("start({source:'display'})");
+  await microphone.feed(15);
+  await display.feed(15);
+  assert.deepEqual(Buffer.from(display.transcriptions[0].audio), Buffer.from(microphone.transcriptions[0].audio));
+  assert.deepEqual(JSON.parse(JSON.stringify(microphoneOptions)), {
+    audio:{channelCount:1,echoCancellation:true,noiseSuppression:true},video:false
+  });
+  microphone.run('stop()');
+  display.run('stop()');
+});
+
+test('ending a selected display track during initialization cannot restart capture', async () => {
+  const fixture = displayFixture();
+  let releaseConstraints;
+  fixture.audioTrack.applyConstraints = () => new Promise(resolve => { releaseConstraints = resolve; });
+  const h = await harness({getDisplayMedia:fixture.getDisplayMedia});
+  const starting = h.run("start({source:'display'})");
+  await h.settle();
+  fixture.audioTrack.readyState = 'ended';
+  fixture.audioTrack.onended();
+  releaseConstraints();
+  await starting;
+  assert.equal(h.run('running'), false);
+  assert.equal(h.run('starting'), false);
+  assert.equal(h.run('stream'), null);
+  assert.equal(h.transcriptions.length, 0);
+  assert.ok(fixture.audioTrack.stops > 0);
+});
+
+test('stopping while the previous session is being closed cancels the next source', async () => {
+  const fixture = displayFixture();
+  let releaseEnding;
+  const h = await harness({getDisplayMedia:fixture.getDisplayMedia,sessions:true,sessionResponder:request => {
+    if (request.method === 'PATCH')
+      return new Promise(resolve => { releaseEnding = () => resolve({ok:true,json:async () => ({ok:true})}); });
+  }});
+  await h.run('start()');
+  await h.feed(15);
+  await h.feed(13, 0);
+  const starting = h.run("start({source:'display'})");
+  await h.settle();
+  assert.equal(typeof releaseEnding, 'function');
+  h.run('stop()');
+  releaseEnding();
+  await starting;
+  assert.equal(h.run('running'), false);
+  assert.equal(h.run('starting'), false);
+  assert.equal(fixture.audioTrack.readyState, 'ended');
+});
+
+test('a restored active watch session continues in its own section and keeps its storage kind', async () => {
+  const fixture = libraryFixture();
+  fixture.session.kind = 'watch';
+  fixture.session.ended_at = null;
+  const display = displayFixture();
+  const h = await harness({sessions:true,getDisplayMedia:display.getDisplayMedia,sessionResponder:fixture.respond,
+    activeSession:{session:fixture.session,turns:fixture.turns}});
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  h.element('libraryContinue').onclick();
+  assert.equal(h.run('panel'), 'watch');
+  assert.match(h.element('messageList').textContent, /Una.*mesa/);
+  await h.element('watchChoose').onclick();
+  assert.equal(h.run('sessionKind'), 'watch');
+  assert.equal(h.run('sessionId'), fixture.session.id);
+  assert.equal(h.sessionRequests.some(request => request.method === 'PATCH' || request.method === 'POST'), false);
+  h.run('stop()');
+});
+
+test('word lookup events exclude saved library turns even while live capture runs', async () => {
+  const fixture = libraryFixture();
+  const h = await harness({sessions:true,sessionResponder:fixture.respond});
+  await h.run('start()');
+  h.run("window.lookups = []; moduleBus.subscribe('lookup', record => window.lookups.push(record))");
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  h.element('libraryMessages').children[0].children[0].children[0].children[0].onclick();
+  await h.settle();
+  assert.equal(h.run('window.lookups.length'), 0);
+  h.run('stop()');
+});
+
+test('watch module is served explicitly and PiP uses linked application styles', async () => {
+  const server = await readFile(new URL('../server.mjs', import.meta.url), 'utf8');
+  const watch = await readFile(new URL('../public/watch.js', import.meta.url), 'utf8');
+  assert.match(server, /'\/watch\.js': \['watch\.js', 'text\/javascript'\]/);
+  assert.doesNotMatch(watch, /createElement\(['"]style['"]\)|\.style\b|setAttribute\(['"]style['"]/);
+  assert.match(watch, /querySelectorAll\('link\[rel="stylesheet"\]'\)/);
+});
+
+test('word clicks in phrase layout explain how to obtain missing meanings in both windows', async () => {
+  const fixture = displayFixture();
+  const h = await harness({getDisplayMedia:fixture.getDisplayMedia,pip:true});
+  h.element('watchTab').onclick();
+  await h.element('watchChoose').onclick();
+  h.run(`show({id:'missing-meaning',text:'Una mesa.',translation:'Стол.',translated_text:'Una mesa.',
+    source_language:'es',target_language:'ru',final:true,translation_status:'ready'})`);
+  h.element('messageList').children[0].children[0].children[0].children[0].onclick();
+  assert.equal(h.element('wordMeaning').textContent, 'Чтобы получить значение, выберите «Под словами».');
+  await h.element('watchPip').onclick();
+  const row = h.pipWindow.document.body.children[0].children[0];
+  row.children[0].children[0].children[0].onclick();
+  assert.equal(row.children.at(-1).textContent, 'Чтобы получить значение, выберите «Под словами».');
+  h.run('stop()');
+});
+
+test('unsupported browsers explain why an active watch cannot be continued from the library', async () => {
+  const fixture = libraryFixture();
+  fixture.session.kind = 'watch';
+  fixture.session.ended_at = null;
+  const h = await harness({sessions:true,sessionResponder:fixture.respond,
+    activeSession:{session:fixture.session,turns:fixture.turns}});
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  assert.equal(h.element('libraryContinue').disabled, true);
+  assert.equal(h.element('libraryContinue').title, 'Звук вкладки работает в Chrome и Edge на компьютере');
+  assert.match(h.element('libraryMessages').textContent, /Una.*mesa/);
 });

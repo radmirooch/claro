@@ -56,12 +56,17 @@ export function download(json, captions = state.history, participants = state.pa
 }
 
 export function setPanel(panel) {
+  if (panel === 'watch' && !navigator.mediaDevices?.getDisplayMedia)
+    return;
+  state.panel = panel;
   state.wordPeek = null;
   $('wordDialog').close();
-  $('readerPanel').hidden = panel !== 'reader';
+  $('readerPanel').hidden = !['reader', 'watch'].includes(panel);
+  $('readerPanel').setAttribute('aria-label', panel === 'watch' ? 'Просмотр' : 'Разговор');
   $('historyPanel').hidden = panel !== 'history';
   $('conversationTab').setAttribute('aria-pressed', String(panel === 'reader'));
   $('historyTab').setAttribute('aria-pressed', String(panel === 'history'));
+  $('watchTab').setAttribute('aria-pressed', String(panel === 'watch'));
   configureLibrary();
   if (panel === 'history') {
     if (state.config?.features?.sessions)
@@ -178,10 +183,11 @@ export function translateText() {
   setPanel('reader');
 }
 
-export function clearConversation() {
+export function clearConversation({ preserveCapture = false } = {}) {
   state.wordPeek = null;
   $('wordDialog').close();
-  stop();
+  if (!preserveCapture)
+    stop();
   state.transcriptEpoch++;
   state.queue.clear();
   cancelTranslations();

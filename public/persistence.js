@@ -76,6 +76,7 @@ export function initializePersistence() {
         if (!enabled() || epoch !== conversationEpoch || !result.session)
           return;
         state.sessionId = result.session.id;
+        state.sessionKind = result.session.kind || 'conversation';
         removeDemo();
         const restored = [...result.turns].sort((a, b) => a.seq - b.seq).map(restoredTurn);
         const localIds = new Set(state.history.map(turn => turn.id));
@@ -111,7 +112,7 @@ async function sessionFor(turn, epoch) {
   const job = { epoch };
   creation = job;
   job.promise = sessionRequest('/api/sessions', 'POST', {
-    kind: 'conversation',
+    kind: state.sessionKind,
     source_language: turn.source_language,
     target_language: turn.target_language
   }).then(session => {
@@ -170,7 +171,7 @@ function saveTurn(event) {
 for (const type of ['caption', 'translation', 'interlinear', 'speaker_assignment'])
   state.moduleBus.subscribe(type, saveTurn);
 
-async function finishConversation(method) {
+async function finishConversation(method, { preserveCapture = false } = {}) {
   if (closing)
     return false;
   closing = true;
@@ -183,7 +184,8 @@ async function finishConversation(method) {
       await sessionRequest(`/api/sessions/${state.sessionId}`, method, method === 'PATCH' ? { ended: true } : undefined);
     conversationEpoch++;
     state.sessionId = null;
-    clearConversation();
+    state.sessionKind = 'conversation';
+    clearConversation({ preserveCapture });
     return true;
   } catch {
     reportError();
@@ -194,16 +196,17 @@ async function finishConversation(method) {
   }
 }
 
-export function newConversation() {
+export function newConversation({ preserveCapture = false } = {}) {
   if (closing)
-    return;
+    return false;
   if (!enabled()) {
     conversationEpoch++;
     state.sessionId = null;
-    clearConversation();
+    state.sessionKind = 'conversation';
+    clearConversation({ preserveCapture });
     return;
   }
-  return finishConversation('PATCH');
+  return finishConversation('PATCH', { preserveCapture });
 }
 
 export function deleteConversation() {

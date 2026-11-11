@@ -9,10 +9,12 @@ import { renderParticipantSettings, addParticipant } from './participant-setting
 import { initializeAppInstall, pairChanged, layoutChanged, setPanel, health, recognitionStatus, download, translationModeChanged, translateText } from './settings.js';
 import { initializePersistence, newConversation, deleteConversation } from './persistence.js';
 import { initializeLibrary, configureLibrary, openLibrary, renderLibrary } from './library.js';
+import { initializeWatch } from './watch.js';
 
 loadPreferences();
 initializeSheets();
 initializeLibrary();
+initializeWatch();
 initializeAppInstall();
 
 for (const id of ['theme', 'palette'])
@@ -30,7 +32,12 @@ for (const [settingsId, sourceId] of [
   };
 
 let recordingStarted = null;
+let recordingGeneration = null;
 export function updateRecordingIndicator(now = Date.now()) {
+  if (recordingGeneration !== state.generation) {
+    recordingGeneration = state.generation;
+    recordingStarted = null;
+  }
   if (state.running && recordingStarted === null)
     recordingStarted = now;
   if (!state.running)
@@ -38,8 +45,10 @@ export function updateRecordingIndicator(now = Date.now()) {
   const elapsed = recordingStarted === null ? 0 : Math.floor((now - recordingStarted) / 1000);
   const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const seconds = String(elapsed % 60).padStart(2, '0');
-  $('recordingTime').textContent = `${minutes}:${seconds}`;
-  const level = state.running ? Math.min(4, Math.ceil(Number($('meter').value) / 0.025)) : 0;
+  $('recordingTime').textContent = state.captureSource === 'mic' ? `${minutes}:${seconds}` : '00:00';
+  $('watchTime').textContent = state.captureSource === 'display' ? `${minutes}:${seconds}` : '00:00';
+  const level = state.running && state.captureSource === 'mic'
+    ? Math.min(4, Math.ceil(Number($('meter').value) / 0.025)) : 0;
   $('soundLevel').setAttribute('data-level', String(level));
 }
 setInterval(updateRecordingIndicator, 100);
@@ -98,7 +107,7 @@ $('engine').onchange = () => {
   controls();
   status(recognitionStatus());
 };
-$('listen').onclick = start;
+$('listen').onclick = () => start({ source: 'mic' });
 $('translationMode').onchange = translationModeChanged;
 $('demo').onclick = showDemo;
 $('copySetup').onclick = async () => {

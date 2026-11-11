@@ -23,6 +23,13 @@ export const MODULES = Object.freeze([
     outputs: ['speaker_assignment']
   },
   {
+    id: 'lookups',
+    available: true,
+    optional: true,
+    inputs: ['caption', 'interlinear'],
+    outputs: ['lookup']
+  },
+  {
     id: 'diarization',
     available: false,
     optional: true,

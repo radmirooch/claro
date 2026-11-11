@@ -42,6 +42,13 @@
             <i class="recording-dot" aria-hidden="true">
             </i>
           </button>
+          <button id="watchTab" aria-pressed="false" aria-describedby="watchUnavailable">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m10 8 5 3-5 3Z M8 21h8"/></svg>
+            </span>
+            <span>Просмотр</span>
+            <i class="recording-dot" aria-hidden="true"></i>
+          </button>
           <button id="historyTab" aria-pressed="false">
             <span class="nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>
@@ -51,6 +58,7 @@
             </span>
           </button>
         </nav>
+        <span id="watchUnavailable" class="watch-unavailable" role="status" hidden></span>
         <div class="toolbar-end">
           <button id="openSettings" class="icon-button" aria-label="Настройки">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -67,7 +75,7 @@
       <main>
         <section id="readerPanel" aria-label="Разговор">
           <div class="reader-heading">
-            <h1 class="sr-only">
+            <h1 id="readerTitle" class="sr-only">
               Разговор
             </h1>
             <button id="display" class="quiet">
@@ -98,6 +106,18 @@
                 Под словами
               </button>
             </div>
+          </div>
+          <div id="watchTools" class="watch-tools" hidden>
+            <div id="watchHeader" class="watch-header" hidden>
+              <span id="watchSource"></span>
+              <time id="watchTime">00:00</time>
+              <button id="watchStop" class="primary">Стоп</button>
+            </div>
+            <button id="watchChoose" class="primary">Выбрать вкладку</button>
+            <p id="watchHint">В окне выбора отметьте „Поделиться звуком вкладки“</p>
+            <p id="watchError" role="status" hidden></p>
+            <button id="watchPip" class="quiet">Окно поверх видео</button>
+            <p id="pipUnavailable" hidden></p>
           </div>
           <section class="conversation" aria-label="Субтитры">
             <div class="card-top" role="status">
@@ -237,7 +257,7 @@
             00:00
           </time>
         </button>
-        <p class="privacy">
+        <p id="capturePrivacy" class="privacy">
           Микрофон включается только по кнопке
         </p>
       </footer>

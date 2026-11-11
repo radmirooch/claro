@@ -31,11 +31,15 @@ export function refreshWordPeek() {
   if (!state.wordPeek.record)
     missingMeaning = ['error', 'overflow', 'unavailable'].includes(event.gloss_status) || !state.config?.gloss?.ready
       ? 'Перевод слова недоступен. Можно повторить перевод сообщения.'
-      : 'Перевод слова ещё готовится…';
+      : $('translationLayout').value !== 'words'
+        ? 'Чтобы получить значение, выберите «Под словами».'
+        : 'Перевод слова ещё готовится…';
   $('wordMeaning').textContent = meaning || missingMeaning;
 }
 
 export function peekWord(event, index, anchor, readOnly = false) {
+  if (!readOnly)
+    publishLookup(event, index);
   state.wordPeek = { id: event.id, text: event.text, index, ...(readOnly ? { record: event } : {}) };
   const unit = sourceUnits(event.text)[index];
   const span = validateGlosses(event.text, event.glosses, readOnly ? 300 : undefined).find(
@@ -51,6 +55,26 @@ export function peekWord(event, index, anchor, readOnly = false) {
     requestTranslation(event);
   else if (event.gloss_status !== 'ready')
     requestGloss(event, null, ['error', 'overflow', 'cancelled'].includes(event.gloss_status));
+}
+
+export function publishLookup(event, index) {
+  if (!state.running || event.demo)
+    return;
+  const unit = sourceUnits(event.text)[index];
+  if (!unit)
+    return;
+  const span = validateGlosses(event.text, event.glosses).find(
+    item => item.start < unit.end && item.end > unit.start
+  );
+  state.moduleBus.publish('lookup', {
+    caption_id: event.id,
+    index,
+    source: span?.source || unit.source,
+    meaning: span?.meaning || null,
+    source_language: event.source_language,
+    target_language: event.target_language,
+    at: new Date().toISOString()
+  });
 }
 
 export function revealMessage(event) {
