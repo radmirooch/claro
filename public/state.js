@@ -23,6 +23,7 @@ export const state = {
   activeTranslation: undefined,
   lastTranslated: undefined,
   engineInitialized: false,
+  sessionId: null,
   history: [],
   current: undefined,
   demoActive: false,

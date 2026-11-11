@@ -71,7 +71,7 @@ export function renderHistory() {
   if (!state.history.length) {
     const p = document.createElement('p');
     p.className = 'empty';
-    p.textContent = 'История живёт только в этой вкладке. Сохраняешь её ты.';
+    p.textContent = 'Здесь появятся готовые реплики разговора.';
     container.append(p);
   }
   for (const event of [...state.history].reverse()) {

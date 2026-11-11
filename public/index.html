@@ -33,7 +33,7 @@
 </section>
 <section id="historyPanel" class="history" hidden aria-label="История разговора">
 <div class="reader-heading"><h1>История разговора</h1></div>
-<div class="history-head"><p></p><div><button id="save" class="quiet" disabled>Текст ↓</button><button id="saveJson" class="quiet" disabled>JSON ↓</button><button id="clear" class="quiet">Очистить</button></div></div>
+<div class="history-head"><p></p><div><button id="save" class="quiet" disabled>Текст ↓</button><button id="saveJson" class="quiet" disabled>JSON ↓</button><button id="clear" class="quiet">Новый разговор</button><button id="deleteConversation" class="quiet" hidden>Удалить</button></div></div>
 <div id="history"><p class="empty">Здесь будут завершённые фразы.</p></div>
 </section>
 </main>
@@ -47,6 +47,7 @@
 <div class="sheet-head"><h2 id="settingsTitle">Настройки</h2><button id="closeSettings" class="quiet">Готово</button></div>
 <section class="settings" aria-label="Настройки разговора">
 <label for="translationMode">Когда переводить<select id="translationMode"><option value="always" selected>Всегда показывать</option><option value="tap">Переводить по нажатию</option><option value="peek">Готовить заранее, скрывать</option><option value="off">Без перевода</option></select></label>
+<label for="saveConversations">Сохранять разговоры<select id="saveConversations"><option value="on" selected>Включено</option><option value="off">Выключено</option></select></label>
 <label for="readingMode">Появление фраз<select id="readingMode"><option value="steady" selected>Спокойно: готовые фразы</option><option value="live">Сразу: с уточнениями</option></select></label>
 <label for="interval">Обновлять субтитры<select id="interval"><option value="1">Каждую секунду</option><option value="1.5" selected>Каждые 1,5 секунды</option><option value="2">Каждые 2 секунды</option></select></label>
 <label for="threshold">Окружение<select id="threshold"><option value="0.006">Тихий разговор</option><option value="0.012" selected>Обычный разговор</option><option value="0.025">Шумное место</option></select></label>

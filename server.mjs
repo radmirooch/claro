@@ -1,5 +1,6 @@
 import http from 'node:http';
-import { readFile, access } from 'node:fs/promises';
+import { readFile, access, mkdir, chmod, open } from 'node:fs/promises';
+import { resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -10,6 +11,8 @@ import { OllamaTranslator, localURL } from './lib/translation.mjs';
 import { LANGUAGES, languageByCode } from './public/languages.js';
 
 import { MODULES } from './public/modules.js';
+import { SessionStore } from './lib/sessions.mjs';
+import { sessionRoute } from './lib/session-api.mjs';
 
 const root = new URL('./public/', import.meta.url);
 const assets = {
@@ -27,6 +30,7 @@ const assets = {
   '/gloss-jobs.js': ['gloss-jobs.js', 'text/javascript'],
   '/capture.js': ['capture.js', 'text/javascript'],
   '/settings.js': ['settings.js', 'text/javascript'],
+  '/persistence.js': ['persistence.js', 'text/javascript'],
   '/participant-settings.js': ['participant-settings.js', 'text/javascript'],
   '/demo.js': ['demo.js', 'text/javascript'],
   '/live.js': ['live.js', 'text/javascript'],
@@ -61,6 +65,7 @@ export function createApp({
   defaultEngine = 'whisper',
   translator = null,
   glosser = null,
+  store = null,
   health = () => ({ ready: true }),
   port = 4317
 }) {
@@ -115,7 +120,9 @@ export function createApp({
           translator: translation.ready,
           translation,
           gloss,
+          storage: { enabled: Boolean(store) },
           features: {
+            sessions: Boolean(store),
             translation_streaming: true,
             live_translation: true,
             live_glosses: true,
@@ -142,6 +149,13 @@ export function createApp({
           subscribers.delete(res);
         });
         return;
+      }
+      if (url.pathname.startsWith('/api/sessions')) {
+        if (!store)
+          throw fail(404, 'Не найдено.');
+        if (req.headers['x-session-token'] !== token)
+          throw fail(403, 'Нужен токен сессии.');
+        return json(200, await sessionRoute(req, url, store));
       }
       if (req.method !== 'POST')
         throw fail(404, 'Не найдено.');
@@ -384,6 +398,23 @@ async function main() {
     if (e.code !== 'ENOENT')
       throw e;
   }
+  let store;
+  if (process.env.CLARO_STORAGE !== 'off') {
+    try {
+      const directory = process.env.CLARO_DATA_DIR
+        ? resolve(process.env.CLARO_DATA_DIR)
+        : fileURLToPath(new URL('./data/', import.meta.url));
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await chmod(directory, 0o700);
+      const databasePath = join(directory, 'claro.sqlite');
+      const file = await open(databasePath, 'a', 0o600);
+      await file.close();
+      await chmod(databasePath, 0o600);
+      store = new SessionStore(databasePath);
+    } catch {
+      console.error('Хранилище разговоров недоступно. Субтитры продолжают работать.');
+    }
+  }
   const port = Number(process.env.PORT || 4317);
   const enginePort = Number(process.env.WHISPER_PORT || 4318);
   const engineURL = localURL(process.env.WHISPER_URL || `http://127.0.0.1:${enginePort}`);
@@ -430,6 +461,7 @@ async function main() {
   const defaultEngine = process.env.ASR_ENGINE || (qwen ? 'qwen' : 'whisper');
   if (!engines[defaultEngine]) {
     qwen?.close();
+    store?.close();
     throw new Error('Выбранный ASR_ENGINE не установлен.');
   }
   const app = createApp({
@@ -437,12 +469,15 @@ async function main() {
     defaultEngine,
     translator,
     glosser,
+    store,
     health: () => engines[defaultEngine].health(),
     port
   });
+  app.once('close', () => store?.close());
   await new Promise((resolve, reject) => {
     app.once('error', error => {
       qwen?.close();
+      store?.close();
       reject(error);
     });
     app.listen(port, '127.0.0.1', resolve);

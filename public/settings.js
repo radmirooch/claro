@@ -8,6 +8,7 @@ import { showTranslation, removeDemo, show, renderHistory } from './render-histo
 import { controls, stop } from './capture.js';
 import { requestTranslation, cancelTranslations } from './translation-jobs.js';
 import { queueExistingGlosses, cancelGlosses } from './gloss-jobs.js';
+import { initializePersistence } from './persistence.js';
 
 const translationMessage = 'Переводчик пока не готов. Оригинал остаётся доступен.';
 
@@ -103,6 +104,7 @@ export async function health() {
     if (!state.running && !state.starting && !state.demoActive)
       status(state.liveReady ? 'Готово' : engineState?.message || 'Модель не установлена');
     controls();
+    await initializePersistence();
     renderConversation();
   } catch {
     state.liveReady = false;

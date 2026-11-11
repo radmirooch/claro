@@ -15,6 +15,6 @@
     "benchmark:asr": "node scripts/benchmark-asr.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   }
 }

@@ -18,3 +18,5 @@ claro-conversation.*
 
 __pycache__/
 *.pyc
+
+data/

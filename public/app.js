@@ -6,7 +6,8 @@ import { controls, start, stop } from './capture.js';
 import { queueExistingGlosses, cancelGlosses } from './gloss-jobs.js';
 import { showDemo } from './demo.js';
 import { renderParticipantSettings, addParticipant } from './participant-settings.js';
-import { pairChanged, layoutChanged, setPanel, health, download, translationModeChanged, translateText, clearConversation } from './settings.js';
+import { pairChanged, layoutChanged, setPanel, health, download, translationModeChanged, translateText } from './settings.js';
+import { initializePersistence, newConversation, deleteConversation } from './persistence.js';
 
 loadPreferences();
 
@@ -64,7 +65,12 @@ $('listen').onclick = start;
 $('translationMode').onchange = translationModeChanged;
 $('demo').onclick = showDemo;
 $('translateText').onclick = translateText;
-$('clear').onclick = clearConversation;
+$('clear').onclick = newConversation;
+$('deleteConversation').onclick = deleteConversation;
+$('saveConversations').onchange = () => {
+  savePreferences();
+  initializePersistence();
+};
 $('save').onclick = () => download(false);
 $('saveJson').onclick = () => download(true);
 $('display').onclick = () => {

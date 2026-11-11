@@ -13,7 +13,8 @@ export const preferenceIds = [
   'showOriginal',
   'showParticipants',
   'textSize',
-  'readingMode'
+  'readingMode',
+  'saveConversations'
 ];
 
 export function loadPreferences() {
