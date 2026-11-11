@@ -1,0 +1,1363 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Прототип интерфейса Claro: Разговор, Учёба и Настройки.">
+<title>Claro: прототип интерфейса</title>
+<script>
+  // Тема применяется до первой отрисовки, чтобы не было вспышки другой темы.
+  (function () {
+    var prefs = {};
+    try { prefs = JSON.parse(localStorage.getItem('claro-proto') || '{}'); } catch (e) {}
+    var params = new URLSearchParams(location.search);
+    var theme = params.get('theme') || prefs.theme || 'auto';
+    var palette = params.get('palette') || prefs.palette || 'graphite';
+    var dark = theme === 'dark' || (theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    document.documentElement.dataset.palette = palette;
+  })();
+</script>
+<style>
+/* ---------- Токены: общие ---------- */
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --scale: 1;
+  --red-9: #e5484d;
+}
+
+/* Светлая база: нейтральные серые */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --gray-2: #f9f9f9;
+  --gray-6: #d9d9d9;
+  --gray-9: #8d8d8d;
+  --gray-10: #838383;
+  --gray-11: #646464;
+  --gray-12: #202020;
+  --gray-a3: rgba(0, 0, 0, 0.055);
+  --gray-a4: rgba(0, 0, 0, 0.08);
+  --gray-a6: rgba(0, 0, 0, 0.18);
+  --line: rgba(0, 0, 0, 0.07);
+  --on-strong: #fcfcfc;
+  --shadow-sm: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 4px 8px rgba(0, 0, 0, 0.05), 0 16px 40px rgba(0, 0, 0, 0.12);
+  --rec-shadow: 0 4px 16px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Тёмная база */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --gray-2: #191919;
+  --gray-6: #3a3a3a;
+  --gray-9: #6e6e6e;
+  --gray-10: #7b7b7b;
+  --gray-11: #b4b4b4;
+  --gray-12: #eeeeee;
+  --gray-a3: rgba(255, 255, 255, 0.07);
+  --gray-a4: rgba(255, 255, 255, 0.1);
+  --gray-a6: rgba(255, 255, 255, 0.22);
+  --line: rgba(255, 255, 255, 0.08);
+  --on-strong: #111111;
+  --shadow-sm: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-md: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-lg: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 16px 40px rgba(0, 0, 0, 0.5);
+  --rec-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+/* ---------- Цвета оформления ----------
+   Каждый цвет задаёт фон, облачка и акцент для светлой и тёмной темы.
+   --accent-ink — цвет значений слов, --accent — заливки и выделение. */
+
+/* Графит */
+:root[data-theme="light"][data-palette="graphite"] {
+  --bg: #fcfcfc; --bg-raised: #ffffff; --material: rgba(252, 252, 252, 0.8);
+  --them: rgba(0, 0, 0, 0.055); --me: #e6f4fe;
+  --accent: #0090ff; --accent-ink: #0b65b8; --accent-soft: rgba(0, 144, 255, 0.14);
+}
+:root[data-theme="dark"][data-palette="graphite"] {
+  --bg: #111111; --bg-raised: #191919; --material: rgba(17, 17, 17, 0.78);
+  --them: rgba(255, 255, 255, 0.07); --me: #0d2847;
+  --accent: #0090ff; --accent-ink: #70b8ff; --accent-soft: rgba(0, 144, 255, 0.26);
+}
+
+/* Песок */
+:root[data-theme="light"][data-palette="sand"] {
+  --bg: #fbf8f3; --bg-raised: #fffdf9; --material: rgba(251, 248, 243, 0.82);
+  --them: #f0e9df; --me: #f8e2cc;
+  --accent: #d9692b; --accent-ink: #96461a; --accent-soft: rgba(217, 105, 43, 0.16);
+}
+:root[data-theme="dark"][data-palette="sand"] {
+  --bg: #16130f; --bg-raised: #1f1b16; --material: rgba(22, 19, 15, 0.8);
+  --them: #26211a; --me: #3b2716;
+  --accent: #e88a52; --accent-ink: #f2ae84; --accent-soft: rgba(232, 138, 82, 0.24);
+}
+
+/* Шалфей */
+:root[data-theme="light"][data-palette="sage"] {
+  --bg: #f7faf7; --bg-raised: #ffffff; --material: rgba(247, 250, 247, 0.82);
+  --them: #e8efe9; --me: #d5ebdb;
+  --accent: #30a46c; --accent-ink: #1a6e49; --accent-soft: rgba(48, 164, 108, 0.16);
+}
+:root[data-theme="dark"][data-palette="sage"] {
+  --bg: #0e1511; --bg-raised: #151d18; --material: rgba(14, 21, 17, 0.8);
+  --them: #19231d; --me: #193b29;
+  --accent: #3dd68c; --accent-ink: #7ddcab; --accent-soft: rgba(61, 214, 140, 0.2);
+}
+
+/* Океан */
+:root[data-theme="light"][data-palette="ocean"] {
+  --bg: #f5f9fd; --bg-raised: #ffffff; --material: rgba(245, 249, 253, 0.82);
+  --them: #e5edf6; --me: #cfe4fb;
+  --accent: #0b74de; --accent-ink: #0a5fb4; --accent-soft: rgba(11, 116, 222, 0.15);
+}
+:root[data-theme="dark"][data-palette="ocean"] {
+  --bg: #0b1320; --bg-raised: #111b2b; --material: rgba(11, 19, 32, 0.8);
+  --them: #16223a; --me: #123a66;
+  --accent: #4ca4ff; --accent-ink: #8cc4ff; --accent-soft: rgba(76, 164, 255, 0.26);
+}
+
+/* Сирень */
+:root[data-theme="light"][data-palette="lilac"] {
+  --bg: #faf8fd; --bg-raised: #ffffff; --material: rgba(250, 248, 253, 0.82);
+  --them: #eee9f6; --me: #e4d9f7;
+  --accent: #8e4ec6; --accent-ink: #7a3fb0; --accent-soft: rgba(142, 78, 198, 0.15);
+}
+:root[data-theme="dark"][data-palette="lilac"] {
+  --bg: #15111b; --bg-raised: #1d1825; --material: rgba(21, 17, 27, 0.8);
+  --them: #231d2d; --me: #36244f;
+  --accent: #b88ae6; --accent-ink: #d0b0f2; --accent-soft: rgba(184, 138, 230, 0.24);
+}
+
+/* ---------- Основа ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: clip; }
+body {
+  background: var(--bg);
+  color: var(--gray-12);
+  font: 15px/1.45 var(--font);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: inherit; touch-action: manipulation; }
+p, h1, h2, ul, dl, dd { margin: 0; padding: 0; }
+ul { list-style: none; }
+mark { background: none; color: inherit; font-weight: 600; }
+svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- Каркас приложения ---------- */
+.app {
+  position: relative;
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: clip;
+  background: var(--bg);
+  transition: background-color 200ms ease;
+}
+.nav {
+  order: 2;
+  display: flex;
+  align-items: center;
+  z-index: 10;
+  background: var(--material);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 -1px 0 var(--line);
+}
+.brand { display: none; }
+.tabs { flex: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 0 calc(6px + env(safe-area-inset-bottom));
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--gray-10);
+  transition: color 150ms ease;
+}
+.tab svg { width: 24px; height: 24px; transition: transform 160ms var(--ease-out); }
+.tab:active svg { transform: scale(0.92); }
+.tab[aria-current="page"] { color: var(--gray-12); }
+.badge {
+  position: absolute;
+  top: 3px;
+  left: calc(50% + 7px);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.badge[hidden] { display: none; }
+.rec-dot {
+  display: none;
+  position: absolute;
+  top: 6px;
+  left: calc(50% + 9px);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red-9);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.app[data-rec] .rec-dot { display: block; }
+.screens { position: relative; min-height: 0; overflow: clip; }
+.screen { position: absolute; inset: 0; }
+.screen[hidden] { display: none; }
+
+@media (min-width: 720px) {
+  .app { grid-template-rows: auto minmax(0, 1fr); }
+  .nav { order: 0; gap: 24px; height: 52px; padding: 0 20px; box-shadow: 0 1px 0 var(--line); }
+  .brand { display: inline-flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 650; letter-spacing: -0.02em; }
+  .tabs { display: flex; gap: 2px; }
+  .tab { flex-direction: row; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; font-size: 14px; color: var(--gray-11); }
+  .tab svg { display: none; }
+  .tab[aria-current="page"] { background: var(--gray-a3); color: var(--gray-12); }
+  .tab[data-go="settings"] { margin-left: auto; }
+  .badge, .rec-dot { position: static; box-shadow: none; }
+}
+@media (min-width: 720px) and (hover: hover) and (pointer: fine) {
+  .tab:not([aria-current="page"]):hover { color: var(--gray-12); }
+}
+
+/* ---------- Общие элементы ---------- */
+.icon-btn {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--gray-11);
+  transition: background-color 150ms ease, transform 160ms var(--ease-out);
+}
+.icon-btn::after { content: ""; position: absolute; inset: -6px; }
+.icon-btn:active { transform: scale(0.94); }
+
+.seg { position: relative; display: inline-flex; padding: 2px; border-radius: 9px; background: var(--gray-a3); }
+.seg-thumb { position: absolute; top: 2px; bottom: 2px; left: 0; border-radius: 7px; background: var(--bg-raised); box-shadow: var(--shadow-sm); }
+.seg[data-ready] .seg-thumb { transition: transform 250ms var(--ease-out), width 250ms var(--ease-out); }
+.seg button { position: relative; height: 28px; padding: 0 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--gray-11); white-space: nowrap; transition: color 150ms ease; }
+.seg button[aria-pressed="true"] { color: var(--gray-12); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 9px;
+  background: var(--gray-12);
+  color: var(--on-strong);
+  font-size: 14px;
+  font-weight: 550;
+  transition: transform 160ms var(--ease-out);
+}
+.btn:active { transform: scale(0.97); }
+.btn svg { width: 16px; height: 16px; stroke-width: 2; }
+.btn-label { transition: filter 200ms ease, opacity 200ms ease; }
+.btn.morph .btn-label { filter: blur(2px); opacity: 0.5; }
+.btn[aria-disabled="true"] { background: var(--gray-a3); color: var(--gray-11); cursor: default; }
+.btn[aria-disabled="true"]:active { transform: none; }
+.btn-quiet { background: var(--gray-a3); color: var(--gray-12); }
+
+@media (hover: hover) and (pointer: fine) {
+  .icon-btn:hover { background: var(--gray-a3); }
+  .seg button:not([aria-pressed="true"]):hover { color: var(--gray-12); }
+}
+
+/* ---------- Разговор ---------- */
+.talk { position: relative; height: 100%; }
+.talk-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 52px;
+  padding: 0 12px 0 16px;
+  background: var(--material);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 1px 0 var(--line);
+}
+.langs { display: flex; align-items: center; gap: 2px; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+.feed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 68px 16px 92px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.turns { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+
+/* Облачко */
+.turn {
+  max-width: 86%;
+  padding: 10px 14px 11px;
+  border-radius: 20px;
+  font-size: calc(18px * var(--scale));
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  transition: opacity 300ms var(--ease-out), transform 300ms var(--ease-out), background-color 200ms ease, box-shadow 150ms ease;
+}
+@starting-style {
+  .turn { opacity: 0; transform: translateY(8px); }
+}
+.turn.them { align-self: flex-start; background: var(--them); border-bottom-left-radius: 6px; }
+.turn.me { align-self: flex-end; background: var(--me); border-bottom-right-radius: 6px; }
+.turn.me + .turn.me, .turn.them + .turn.them { margin-top: -4px; }
+.draft { margin-top: 8px; color: var(--gray-10); background: none; box-shadow: inset 0 0 0 1px var(--gray-a4); }
+.draft[hidden] { display: none; }
+
+/* Подстрочник: значение по центру под своим словом или выражением */
+.il { display: flex; flex-wrap: wrap; align-items: flex-start; column-gap: 0.5em; row-gap: 10px; }
+.u {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: transform 160ms var(--ease-out);
+}
+.u::before {
+  content: "";
+  position: absolute;
+  inset: -3px -5px;
+  border-radius: 7px;
+  background: var(--gray-a3);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.u:active { transform: scale(0.97); }
+.u[aria-expanded="true"]::before { opacity: 1; background: var(--accent-soft); }
+.w { position: relative; white-space: nowrap; }
+.u.ph .w {
+  text-decoration: underline;
+  text-decoration-color: var(--gray-a6);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.26em;
+}
+.g {
+  position: relative;
+  max-width: 9.5em;
+  margin-top: 3px;
+  font-size: calc(13px * var(--scale));
+  line-height: 1.2;
+  font-weight: 450;
+  letter-spacing: 0;
+  color: var(--accent-ink);
+  text-wrap: balance;
+}
+.g.pending { width: 2.4em; height: 10px; margin-top: 5px; border-radius: 3px; background: var(--gray-a4); }
+
+/* Перевод фразы целиком: отдельная строка под фразой */
+.tr {
+  display: none;
+  margin-top: 8px;
+  padding-top: 7px;
+  box-shadow: 0 -1px 0 var(--gray-a4);
+  font-size: calc(15px * var(--scale));
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: var(--accent-ink);
+}
+.tr.pending { width: 60%; height: 10px; margin-top: 12px; padding: 0; border-radius: 3px; background: var(--gray-a4); box-shadow: none; }
+.app[data-layout="phrase"] .il,
+.app[data-reveal="tap"] .turns .turn:not(.open) .il { row-gap: 2px; }
+.app[data-layout="phrase"] .g { display: none; }
+.app[data-layout="phrase"] .tr { display: block; }
+.g.in, .tr.in { animation: settle 240ms var(--ease-out) both; animation-delay: var(--d, 0ms); }
+@keyframes settle { from { opacity: 0; filter: blur(3px); } }
+
+/* Перевод по нажатию: облачко показывает только оригинал, пока его не открыли */
+.app[data-reveal="tap"] .turns .turn { cursor: pointer; }
+.app[data-reveal="tap"] .turns .turn:not(.open) .g,
+.app[data-reveal="tap"] .turns .turn:not(.open) .tr { display: none; }
+.app[data-reveal="tap"] .turns .turn.open .g:not(.pending),
+.app[data-reveal="tap"] .turns .turn.open .tr:not(.pending) { animation: settle 220ms var(--ease-out) both; animation-delay: var(--d, 0ms); }
+.app[data-reveal="tap"] .turns .turn:not(.open) .u::before { display: none; }
+
+@media (hover: hover) and (pointer: fine) {
+  .u:hover::before { opacity: 1; }
+  .app[data-reveal="tap"] .turns .turn:not(.open):hover { box-shadow: inset 0 0 0 1px var(--gray-a6); }
+}
+
+/* Запись */
+.controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  padding: 24px 16px 16px;
+  pointer-events: none;
+  background: linear-gradient(to top, var(--bg) 0%, var(--bg) 45%, color-mix(in srgb, var(--bg) 70%, transparent) 70%, transparent 100%);
+}
+.rec {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 18px 0 16px;
+  border-radius: 999px;
+  background: var(--gray-12);
+  color: var(--on-strong);
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: var(--rec-shadow);
+  transition: transform 160ms var(--ease-out);
+}
+.rec:active { transform: scale(0.97); }
+.rec-icon { width: 12px; height: 12px; border-radius: 3px; background: var(--red-9); transition: border-radius 200ms var(--ease-out); }
+.app:not([data-rec]) .rec-icon { border-radius: 50%; }
+.rec .sep { width: 1px; height: 16px; background: currentColor; opacity: 0.2; }
+.rec .timer, .rec .level { opacity: 0.7; font-weight: 500; }
+.timer { font-variant-numeric: tabular-nums; }
+.level { display: inline-flex; align-items: center; gap: 2px; height: 16px; }
+.level i { width: 3px; height: 16px; border-radius: 2px; background: currentColor; transform: scaleY(0.25); }
+.app[data-rec] .level i { animation: level 900ms ease-in-out infinite alternate; }
+.app:not([data-rec]) .rec .level { display: none; }
+.level i:nth-child(2) { animation-delay: -300ms; }
+.level i:nth-child(3) { animation-delay: -600ms; }
+.level i:nth-child(4) { animation-delay: -150ms; }
+@keyframes level { from { transform: scaleY(0.25); } to { transform: scaleY(1); } }
+
+@media (min-width: 720px) {
+  .talk-head, .feed, .controls { padding-left: max(20px, calc((100% - 720px) / 2)); padding-right: max(20px, calc((100% - 720px) / 2)); }
+  .turn { max-width: 78%; font-size: calc(19px * var(--scale)); }
+}
+
+/* ---------- Слово: лист снизу и всплывающее окно ---------- */
+.scrim { position: absolute; inset: 0; z-index: 20; background: rgba(0, 0, 0, 0.32); opacity: 0; pointer-events: none; transition: opacity 260ms ease; }
+.app[data-sheet] .scrim { opacity: 1; pointer-events: auto; transition-duration: 360ms; }
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 21;
+  padding: 8px 20px calc(20px + env(safe-area-inset-bottom));
+  border-radius: 16px 16px 0 0;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(calc(100% + 40px));
+  visibility: hidden;
+  transition: transform 260ms var(--ease-drawer), visibility 0s linear 260ms;
+  touch-action: none;
+}
+.app[data-sheet] .sheet { transform: translateY(0); visibility: visible; transition: transform 380ms var(--ease-drawer), visibility 0s; }
+.sheet.dragging { transition: none; }
+.grip { width: 36px; height: 5px; margin: 0 auto 16px; border-radius: 3px; background: var(--gray-6); }
+.sheet .btn { width: 100%; height: 44px; margin-top: 20px; font-size: 15px; }
+.popover {
+  position: absolute;
+  z-index: 21;
+  width: 320px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 150ms ease-out, transform 150ms var(--ease-out), visibility 0s linear 150ms;
+}
+.popover.open { opacity: 1; transform: none; pointer-events: auto; visibility: visible; transition: opacity 200ms ease-out, transform 200ms var(--ease-out), visibility 0s; }
+.popover .btn { margin-top: 16px; }
+.wd-term { font-size: 24px; line-height: 1.15; font-weight: 650; letter-spacing: -0.02em; }
+.wd-meaning { margin-top: 2px; font-size: 17px; color: var(--accent-ink); }
+.wd-meta { display: grid; gap: 12px; margin-top: 16px; }
+.wd-meta dt { margin-bottom: 2px; font-size: 12px; color: var(--gray-10); }
+.wd-meta dd { font-size: 14px; line-height: 1.4; }
+.wd-meta dd + dd { margin-top: 2px; color: var(--gray-11); }
+
+/* ---------- Учёба ---------- */
+.study { height: 100%; display: flex; flex-direction: column; }
+.study-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 52px; padding: 0 16px; flex-shrink: 0; }
+.progress-text { font-size: 14px; color: var(--gray-11); font-variant-numeric: tabular-nums; }
+.study-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.lessons { flex: 1; padding: 8px 16px; }
+.lessons[hidden], .cards-view[hidden] { display: none; }
+.cards-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.card-slot { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 4px 16px 0; }
+.card-slot::before, .card-slot::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40px;
+  border-radius: 20px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-sm);
+}
+.card-slot::before { transform: translateY(12px) scale(0.92); opacity: 0.5; }
+.card-slot::after { transform: translateY(6px) scale(0.96); opacity: 0.8; }
+.card-slot[data-left="2"]::before, .card-slot[data-left="1"]::before, .card-slot[data-left="1"]::after,
+.card-slot[data-left="0"]::before, .card-slot[data-left="0"]::after { display: none; }
+.card {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 40px 24px 24px;
+  border-radius: 20px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: opacity 260ms var(--ease-out), transform 260ms var(--ease-out);
+}
+@starting-style {
+  .card { opacity: 0; transform: translateY(10px) scale(0.98); }
+}
+.card.out { opacity: 0; transform: translateY(-10px) scale(0.98); transition-duration: 160ms; pointer-events: none; }
+.term { font-size: calc(36px * var(--scale)); line-height: 1.08; font-weight: 650; letter-spacing: -0.03em; }
+.ex { margin-top: 10px; font-size: calc(17px * var(--scale)); line-height: 1.4; color: var(--gray-11); }
+.ex mark { color: var(--gray-12); }
+.back { margin-top: 24px; padding-top: 20px; box-shadow: 0 -1px 0 var(--line); animation: settle 220ms var(--ease-out) both; }
+.card:not(.revealed) .back { display: none; }
+.meaning { font-size: calc(22px * var(--scale)); line-height: 1.25; font-weight: 600; letter-spacing: -0.015em; color: var(--accent-ink); }
+.ex-tr { margin-top: 4px; font-size: calc(15px * var(--scale)); color: var(--gray-11); }
+.src { margin-top: 12px; font-size: 13px; color: var(--gray-10); }
+.actions { padding: 24px 16px 16px; flex-shrink: 0; }
+.show-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--gray-12);
+  color: var(--on-strong);
+  font-size: 15px;
+  font-weight: 600;
+  transition: transform 160ms var(--ease-out);
+}
+.show-btn:active { transform: scale(0.98); }
+kbd { display: none; padding: 1px 6px; border-radius: 5px; background: rgba(127, 127, 127, 0.25); font: 500 12px var(--font); }
+.rate { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.rate[hidden], .show-btn[hidden] { display: none; }
+.r {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--gray-a3);
+  transition: transform 160ms var(--ease-out), background-color 150ms ease;
+}
+.r:active { transform: scale(0.96); }
+.r b { font-size: 14px; font-weight: 600; }
+.r span { font-size: 12px; color: var(--gray-11); font-variant-numeric: tabular-nums; }
+.r.primary { background: var(--gray-12); color: var(--on-strong); }
+.r.primary span { color: inherit; opacity: 0.65; }
+.done { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; padding: 24px; text-align: center; }
+.done h2 { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
+.done p { color: var(--gray-11); }
+.done .btn { margin-top: 14px; }
+.lesson { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; box-shadow: 0 1px 0 var(--line); }
+.lesson b { display: block; font-weight: 550; }
+.lesson span { font-size: 13px; color: var(--gray-11); }
+.lesson em { font-style: normal; font-size: 13px; color: var(--gray-10); white-space: nowrap; }
+@media (hover: hover) and (pointer: fine) {
+  .r:not(.primary):hover { background: var(--gray-a4); }
+  kbd { display: inline-block; }
+}
+@media (min-width: 720px) {
+  .study { max-width: 640px; margin: 0 auto; }
+  .study-head { padding: 0; margin-top: 12px; }
+  .card-slot { flex: none; height: 420px; margin: 8px 0 0; }
+  .card { padding: 48px 40px 32px; }
+  .actions { padding: 32px 0 24px; }
+  .term { font-size: calc(44px * var(--scale)); }
+}
+
+/* ---------- Прочие разделы ---------- */
+.simple { height: 100%; overflow-y: auto; padding: 20px 16px 32px; }
+.simple-inner { max-width: 640px; margin: 0 auto; }
+.simple h1 { font-size: 28px; line-height: 1.15; font-weight: 700; letter-spacing: -0.025em; }
+.simple .lead { margin-top: 8px; max-width: 46ch; color: var(--gray-11); }
+.simple .btn { margin-top: 20px; }
+.note { margin-top: 12px; min-height: 1.45em; font-size: 14px; color: var(--gray-11); }
+.group-title { margin: 28px 0 4px; font-size: 13px; font-weight: 550; color: var(--gray-10); }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 52px; padding: 8px 0; box-shadow: 0 1px 0 var(--line); }
+.row > span:last-child { color: var(--gray-11); text-align: right; }
+.row-stack { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 0 14px; }
+.row-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.hint { font-size: 13px; line-height: 1.4; color: var(--gray-11); }
+.dialog-item { display: block; padding: 14px 0; box-shadow: 0 1px 0 var(--line); }
+.dialog-item b { display: block; font-weight: 550; }
+.dialog-item span { font-size: 13px; color: var(--gray-11); }
+
+/* Образец оформления в настройках */
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  transition: background-color 200ms ease;
+}
+.preview .turn { max-width: 90%; font-size: 16px; }
+
+/* Цвета */
+.swatches { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 52px;
+  font-size: 12px;
+  color: var(--gray-11);
+  transition: transform 160ms var(--ease-out), color 150ms ease;
+}
+.swatch:active { transform: scale(0.95); }
+.swatch-dot {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: clip;
+  background: var(--sw-bg);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 150ms ease;
+}
+.swatch-dot::after { content: ""; position: absolute; right: 7px; bottom: 7px; width: 14px; height: 14px; border-radius: 50%; background: var(--sw-accent); }
+.swatch[aria-pressed="true"] { color: var(--gray-12); font-weight: 550; }
+.swatch[aria-pressed="true"] .swatch-dot { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08), 0 0 0 2px var(--bg), 0 0 0 4px var(--gray-12); }
+.swatch[data-palette="graphite"] { --sw-bg: #ececec; --sw-accent: #0090ff; }
+.swatch[data-palette="sand"] { --sw-bg: #f0e4d4; --sw-accent: #d9692b; }
+.swatch[data-palette="sage"] { --sw-bg: #dcebe0; --sw-accent: #30a46c; }
+.swatch[data-palette="ocean"] { --sw-bg: #d6e6f7; --sw-accent: #0b74de; }
+.swatch[data-palette="lilac"] { --sw-bg: #e7def4; --sw-accent: #8e4ec6; }
+:root[data-theme="dark"] .swatch[data-palette="graphite"] { --sw-bg: #2a2a2a; }
+:root[data-theme="dark"] .swatch[data-palette="sand"] { --sw-bg: #3b2716; --sw-accent: #e88a52; }
+:root[data-theme="dark"] .swatch[data-palette="sage"] { --sw-bg: #193b29; --sw-accent: #3dd68c; }
+:root[data-theme="dark"] .swatch[data-palette="ocean"] { --sw-bg: #123a66; --sw-accent: #4ca4ff; }
+:root[data-theme="dark"] .swatch[data-palette="lilac"] { --sw-bg: #36244f; --sw-accent: #b88ae6; }
+:root[data-theme="dark"] .swatch-dot { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+:root[data-theme="dark"] .swatch[aria-pressed="true"] .swatch-dot { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 0 2px var(--bg), 0 0 0 4px var(--gray-12); }
+@media (min-width: 720px) {
+  .simple { padding: 40px 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn { transition: opacity 200ms ease; }
+  @starting-style { .turn { transform: none; } }
+  .card, .card.out { transform: none; }
+  @starting-style { .card { transform: none; } }
+  .sheet, .app[data-sheet] .sheet { transition: opacity 200ms ease, visibility 0s; }
+  .app:not([data-sheet]) .sheet { opacity: 0; }
+  .popover { transform: none; }
+  .app[data-rec] .level i { animation: none; transform: scaleY(0.6); }
+  .g.in, .tr.in, .back { animation-name: fade; }
+  @keyframes fade { from { opacity: 0; } }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+// ---------- Данные: синтетический диалог ----------
+const DIALOG = [
+  { who: 'them', text: '¿Quedamos mañana por la tarde?', tr: 'Встретимся завтра вечером?',
+    units: [['¿Quedamos', 'встретимся?'], ['mañana', 'завтра'], ['por la tarde?', 'вечером', 1]] },
+  { who: 'me', text: 'Sí, pero tengo que salir del trabajo un poco antes.', tr: 'Да, но мне нужно уйти с работы немного раньше.',
+    units: [['Sí,', 'да,'], ['pero', 'но'], ['tengo que', 'мне нужно', 1], ['salir', 'уйти'], ['del trabajo', 'с работы', 1], ['un poco', 'немного', 1], ['antes.', 'раньше.']] },
+  { who: 'them', text: 'No te preocupes, te espero en la cafetería de la esquina.', tr: 'Не переживай, подожду тебя в кафе на углу.',
+    units: [['No te preocupes,', 'не переживай,', 1], ['te', 'тебя'], ['espero', 'подожду'], ['en la cafetería', 'в кафе', 1], ['de la esquina.', 'на углу.', 1]] },
+  { who: 'me', text: 'Perfecto, nos vemos a las seis.', tr: 'Отлично, увидимся в шесть.',
+    units: [['Perfecto,', 'отлично,'], ['nos vemos', 'увидимся', 1], ['a las seis.', 'в шесть.', 1]] },
+  { who: 'them', text: 'Genial. Y si llueve, podemos ir al cine.', tr: 'Здорово. А если пойдёт дождь, можем сходить в кино.',
+    units: [['Genial.', 'здорово.'], ['Y', 'а'], ['si llueve,', 'если пойдёт дождь,', 1], ['podemos', 'можем'], ['ir al cine.', 'сходить в кино.', 1]] },
+  { who: 'me', text: 'Me parece bien. ¿Qué película quieres ver?', tr: 'Мне подходит. Какой фильм ты хочешь посмотреть?',
+    units: [['Me parece bien.', 'мне подходит.', 1], ['¿Qué', 'какой'], ['película', 'фильм'], ['quieres', 'хочешь'], ['ver?', 'посмотреть?']] },
+  { who: 'them', text: 'La nueva de Almodóvar, dicen que es preciosa.', tr: 'Новый фильм Альмодовара, говорят, очень красивый.',
+    units: [['La nueva', 'новый фильм', 1], ['de Almodóvar,', 'Альмодовара,', 1], ['dicen que', 'говорят,', 1], ['es', 'он'], ['preciosa.', 'очень красивый.']] },
+  { who: 'me', text: 'Vale, entonces hasta mañana.', tr: 'Хорошо, тогда до завтра.',
+    units: [['Vale,', 'хорошо,'], ['entonces', 'тогда'], ['hasta mañana.', 'до завтра.', 1]] },
+];
+const PRELOADED = 3;
+
+const LEMMA = {
+  quedamos: 'quedar: встречаться, договариваться о встрече',
+  espero: 'esperar: ждать, надеяться',
+  salir: 'salir: выходить, уходить',
+  'tengo que': 'tener que: быть должным что-то сделать',
+  podemos: 'poder: мочь',
+  quieres: 'querer: хотеть; любить',
+  'dicen que': 'decir que: говорить, что',
+  'si llueve': 'llover: идти (о дожде)',
+  'nos vemos': 'verse: видеться, встречаться',
+  ver: 'ver: видеть, смотреть',
+  es: 'ser: быть',
+};
+
+const DECK = [
+  { term: 'nos vemos', ex: 'Perfecto, <mark>nos vemos</mark> a las seis.', meaning: 'увидимся', tr: 'Отлично, увидимся в шесть.' },
+  { term: 'quedar', ex: '¿<mark>Quedamos</mark> mañana por la tarde?', meaning: 'встречаться, договариваться о встрече', tr: 'Встретимся завтра вечером?' },
+  { term: 'tener que', ex: 'Sí, pero <mark>tengo que</mark> salir del trabajo un poco antes.', meaning: 'нужно, быть должным', tr: 'Да, но мне нужно уйти с работы немного раньше.' },
+  { term: 'la esquina', ex: 'Te espero en la cafetería de <mark>la esquina</mark>.', meaning: 'угол улицы', tr: 'Подожду тебя в кафе на углу.' },
+  { term: 'si llueve', ex: 'Y <mark>si llueve</mark>, podemos ir al cine.', meaning: 'если пойдёт дождь', tr: 'А если пойдёт дождь, можем сходить в кино.' },
+];
+const RATINGS = [['Снова', '1 мин'], ['Трудно', '10 мин'], ['Хорошо', '1 день'], ['Легко', '4 дня']];
+const PALETTES = [['graphite', 'Графит'], ['sand', 'Песок'], ['sage', 'Шалфей'], ['ocean', 'Океан'], ['lilac', 'Сирень']];
+
+// ---------- Настройки зрителя ----------
+const prefs = Object.assign(
+  { theme: 'auto', palette: 'graphite', scale: '1', layout: 'words', reveal: 'always' },
+  readPrefs()
+);
+const params = new URLSearchParams(location.search);
+['theme', 'palette', 'layout', 'reveal'].forEach((key) => {
+  if (params.get(key)) prefs[key] = params.get(key);
+});
+
+function readPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem('claro-proto') || '{}');
+  } catch (error) {
+    return {};
+  }
+}
+
+function savePrefs() {
+  try {
+    localStorage.setItem('claro-proto', JSON.stringify(prefs));
+  } catch (error) {
+    // Без хранилища настройки живут до перезагрузки.
+  }
+}
+
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+
+function applyTheme() {
+  const dark = prefs.theme === 'dark' || (prefs.theme === 'auto' && darkQuery.matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  document.documentElement.dataset.palette = prefs.palette;
+}
+darkQuery.addEventListener('change', applyTheme);
+
+// ---------- Иконки ----------
+const I = {
+  logo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9v6m6-10v14m6-10v6"/></svg>',
+  talk: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15v10h-8.5l-4.5 3.5v-3.5h-2z"/></svg>',
+  watch: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="11.5" rx="2"/><path d="M10.5 8.5l4 2.25-4 2.25z"/><path d="M8.5 20h7"/></svg>',
+  library: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h3.5v15H5zM10.5 4.5H14v15h-3.5z"/><path d="M16.2 5.4l3.3.9-3.6 13.4-3.3-.9"/></svg>',
+  study: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="7.5" width="13" height="12" rx="2"/><path d="M7.5 4.5h11a2 2 0 012 2v10"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.4"/><circle cx="15" cy="17" r="2.4"/></svg>',
+  swap: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h14l-3.5-3.5M19 15H5l3.5 3.5"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+};
+
+// ---------- Разметка ----------
+function seg(name, options, label) {
+  const buttons = options
+    .map(([value, text]) => `<button type="button" data-${name}="${value}" aria-pressed="${prefs[name] === value}">${text}</button>`)
+    .join('');
+  return `<div class="seg" role="group" aria-label="${label}"><span class="seg-thumb" aria-hidden="true"></span>${buttons}</div>`;
+}
+
+function tab(key, label, icon, extra = '') {
+  return `<button type="button" class="tab" data-go="${key}">${icon}<span>${label}</span>${extra}</button>`;
+}
+
+const layoutSeg = () => seg('layout', [['phrase', 'Фраза'], ['words', 'Слова']], 'Вид перевода');
+const level = '<span class="level" aria-hidden="true"><i></i><i></i><i></i><i></i></span>';
+
+function unitHTML(t, unit, u, ready) {
+  const [word, gloss, phrase] = unit;
+  const g = ready ? `<span class="g">${gloss}</span>` : '<span class="g pending" aria-label="Перевод готовится"></span>';
+  return `<button type="button" class="u${phrase ? ' ph' : ''}" data-t="${t}" data-u="${u}" aria-expanded="false"><span class="w">${word}</span>${g}</button>`;
+}
+
+function turnInner(t, ready) {
+  const turn = DIALOG[t];
+  const units = turn.units.map((unit, u) => unitHTML(t, unit, u, ready)).join('');
+  const tr = ready ? `<p class="tr">${turn.tr}</p>` : '<p class="tr pending"></p>';
+  return `<div class="il" lang="es">${units}</div>${tr}`;
+}
+
+const talkScreen = () => `
+  <div class="talk">
+    <header class="talk-head">
+      <div class="langs"><span class="lang-a">Испанский</span><button type="button" class="icon-btn swap" aria-label="Поменять языки местами">${I.swap}</button><span class="lang-b">Русский</span></div>
+      ${layoutSeg()}
+    </header>
+    <div class="feed" role="log" aria-label="Реплики"><div class="turns"></div><div class="draft turn" hidden></div></div>
+    <div class="controls">
+      <button type="button" class="rec"><span class="rec-icon" aria-hidden="true"></span><span class="rec-label">Стоп</span><span class="sep" aria-hidden="true"></span>${level}<span class="timer">04:12</span></button>
+    </div>
+  </div>`;
+
+const studyScreen = () => `
+  <div class="study">
+    <header class="study-head">${seg('sub', [['lessons', 'Уроки'], ['cards', 'Карточки']], 'Раздел учёбы')}<span class="progress-text"></span></header>
+    <div class="study-body">
+      <div class="lessons" hidden>
+        <div class="lesson"><div><b>Кафе на углу</b><span>Предлоги места, время встречи</span></div><em>3 ошибки</em></div>
+        <div class="lesson"><div><b>Планы на выходные</b><span>Будущее время</span></div><em>Разбирается</em></div>
+      </div>
+      <div class="cards-view">
+        <div class="card-slot"></div>
+        <div class="actions">
+          <button type="button" class="show-btn">Показать ответ <kbd>Пробел</kbd></button>
+          <div class="rate" role="group" aria-label="Насколько легко вспомнили" hidden>
+            ${RATINGS.map(([label, when], i) => `<button type="button" class="r${i === 2 ? ' primary' : ''}" data-r="${i}"><b>${label}</b><span>${when}</span></button>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+const watchScreen = () => `
+  <div class="simple"><div class="simple-inner">
+    <h1>Просмотр</h1>
+    <p class="lead">Субтитры к видео и подкастам. Выберите вкладку со звуком, и окно с переводом встанет поверх видео.</p>
+    <button type="button" class="btn pick-tab">Выбрать вкладку</button>
+    <p class="note" role="status"></p>
+  </div></div>`;
+
+const libraryScreen = () => `
+  <div class="simple"><div class="simple-inner">
+    <h1>Библиотека</h1>
+    <p class="group-title">Сегодня</p>
+    <div class="dialog-item"><b>Кафе на углу</b><span>Разговор, 8 реплик, 6 мин</span></div>
+    <p class="group-title">Вчера</p>
+    <div class="dialog-item"><b>Новости, выпуск в 9:00</b><span>Просмотр, 41 реплика, 18 мин</span></div>
+    <div class="dialog-item"><b>Планы на выходные</b><span>Разговор, 23 реплики, 12 мин</span></div>
+  </div></div>`;
+
+const settingsScreen = () => `
+  <div class="simple"><div class="simple-inner">
+    <h1>Настройки</h1>
+
+    <p class="group-title">Оформление</p>
+    <div class="preview" aria-hidden="true">
+      <div class="turn them"><div class="il" lang="es"><span class="u"><span class="w">¿Quedamos</span><span class="g">встретимся?</span></span><span class="u"><span class="w">mañana?</span><span class="g">завтра?</span></span></div><p class="tr">Встретимся завтра?</p></div>
+      <div class="turn me"><div class="il" lang="es"><span class="u"><span class="w">Sí,</span><span class="g">да,</span></span><span class="u ph"><span class="w">a las seis.</span><span class="g">в шесть.</span></span></div><p class="tr">Да, в шесть.</p></div>
+    </div>
+    <div class="row"><span>Тема</span>${seg('theme', [['auto', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']], 'Тема')}</div>
+    <div class="row row-stack"><span>Цвет</span>
+      <div class="swatches" role="group" aria-label="Цвет оформления">
+        ${PALETTES.map(([key, name]) => `<button type="button" class="swatch" data-palette="${key}" aria-pressed="${prefs.palette === key}"><span class="swatch-dot" aria-hidden="true"></span>${name}</button>`).join('')}
+      </div>
+    </div>
+    <div class="row"><span>Размер текста</span>${seg('scale', [['1', 'Обычный'], ['1.15', 'Крупный']], 'Размер текста')}</div>
+
+    <p class="group-title">Перевод</p>
+    <div class="row row-stack">
+      <div class="row-line"><span>Показывать</span>${seg('reveal', [['always', 'Сразу'], ['tap', 'По нажатию']], 'Когда показывать перевод')}</div>
+      <p class="hint reveal-hint"></p>
+    </div>
+    <div class="row"><span>Вид</span>${layoutSeg()}</div>
+
+    <p class="group-title">Языки</p>
+    <div class="row"><span>Изучаю</span><span>Испанский</span></div>
+    <div class="row"><span>Перевод на</span><span>Русский</span></div>
+  </div></div>`;
+
+function appHTML() {
+  return `
+  <div class="app" data-layout="${prefs.layout}" data-reveal="${prefs.reveal}">
+    <nav class="nav" aria-label="Разделы">
+      <span class="brand">${I.logo}<span>claro</span></span>
+      <div class="tabs">
+        ${tab('talk', 'Разговор', I.talk, '<i class="rec-dot" role="img" aria-label="идёт запись"></i>')}
+        ${tab('watch', 'Просмотр', I.watch)}
+        ${tab('library', 'Библиотека', I.library)}
+        ${tab('study', 'Учёба', I.study, '<span class="badge"></span>')}
+        ${tab('settings', 'Настройки', I.gear)}
+      </div>
+    </nav>
+    <main class="screens">
+      <section class="screen" data-screen="talk" aria-label="Разговор">${talkScreen()}</section>
+      <section class="screen" data-screen="study" aria-label="Учёба" hidden>${studyScreen()}</section>
+      <section class="screen" data-screen="watch" aria-label="Просмотр" hidden>${watchScreen()}</section>
+      <section class="screen" data-screen="library" aria-label="Библиотека" hidden>${libraryScreen()}</section>
+      <section class="screen" data-screen="settings" aria-label="Настройки" hidden>${settingsScreen()}</section>
+    </main>
+    <div class="scrim"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="Слово"><div class="grip" aria-hidden="true"></div><div class="sheet-body"></div></div>
+    <div class="popover" role="dialog" aria-label="Слово"><div class="pop-body"></div></div>
+  </div>`;
+}
+
+// ---------- Поведение ----------
+function placeThumb(group) {
+  const thumb = group.querySelector('.seg-thumb');
+  const active = group.querySelector('button[aria-pressed="true"]');
+  if (!thumb || !active) return;
+  thumb.style.width = active.offsetWidth + 'px';
+  thumb.style.transform = `translateX(${active.offsetLeft - 2}px)`;
+}
+
+function clean(word) {
+  return word.replace(/[¿?¡!,.]/g, '').trim();
+}
+
+function start() {
+  applyTheme();
+  const root = document.getElementById('root');
+  root.innerHTML = appHTML();
+  const app = root.querySelector('.app');
+  app.style.setProperty('--scale', prefs.scale);
+
+  const state = {
+    recording: true,
+    seconds: 252,
+    next: PRELOADED,
+    draftWords: 0,
+    selected: null,
+    deck: DECK.slice(),
+    queue: DECK.map((_, i) => i),
+    done: [],
+    added: new Set(),
+  };
+
+  const feed = app.querySelector('.feed');
+  const turns = app.querySelector('.turns');
+  const draft = app.querySelector('.draft');
+  const sheet = app.querySelector('.sheet');
+  const popover = app.querySelector('.popover');
+  const badge = app.querySelector('.badge');
+  const slot = app.querySelector('.card-slot');
+  const showBtn = app.querySelector('.show-btn');
+  const rateRow = app.querySelector('.rate');
+
+  const allSegs = () => app.querySelectorAll('.seg');
+  requestAnimationFrame(() => allSegs().forEach((group) => {
+    placeThumb(group);
+    requestAnimationFrame(() => group.setAttribute('data-ready', ''));
+  }));
+
+  function syncPressed(name) {
+    app.querySelectorAll(`button[data-${name}]`).forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.dataset[name] === prefs[name]));
+    });
+    allSegs().forEach(placeThumb);
+  }
+
+  function updateRevealHint() {
+    app.querySelector('.reveal-hint').textContent = prefs.reveal === 'tap'
+      ? 'Облачко показывает только оригинал. Нажмите на него, чтобы открыть перевод.'
+      : 'Перевод появляется под фразой, как только готов.';
+  }
+  updateRevealHint();
+
+  function setPref(name, value) {
+    prefs[name] = value;
+    savePrefs();
+    syncPressed(name);
+    if (name === 'theme' || name === 'palette') applyTheme();
+    if (name === 'scale') app.style.setProperty('--scale', value);
+    if (name === 'layout') {
+      app.dataset.layout = value;
+      closeWord();
+    }
+    if (name === 'reveal') {
+      app.dataset.reveal = value;
+      app.querySelectorAll('.turns .turn.open').forEach((t) => t.classList.remove('open'));
+      updateRevealHint();
+      closeWord();
+    }
+  }
+
+  // Нажатия
+  app.addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    const turnEl = event.target.closest('.turns .turn');
+
+    // В режиме «По нажатию» первое нажатие открывает перевод облачка,
+    // нажатие на открытом облачке мимо слов снова его скрывает.
+    if (turnEl && app.dataset.reveal === 'tap') {
+      if (!turnEl.classList.contains('open')) {
+        turnEl.querySelectorAll('.g').forEach((g, j) => g.style.setProperty('--d', `${j * 25}ms`));
+        turnEl.classList.add('open');
+        return;
+      }
+      if (!button) {
+        turnEl.classList.remove('open');
+        closeWord();
+        return;
+      }
+    }
+    if (!button || !app.contains(button)) return;
+
+    for (const name of ['theme', 'palette', 'scale', 'layout', 'reveal']) {
+      if (button.dataset[name] !== undefined) return setPref(name, button.dataset[name]);
+    }
+    if (button.dataset.sub) {
+      button.closest('.seg').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+      placeThumb(button.closest('.seg'));
+      app.querySelector('.lessons').hidden = button.dataset.sub !== 'lessons';
+      app.querySelector('.cards-view').hidden = button.dataset.sub !== 'cards';
+      return;
+    }
+    if (button.dataset.go) return go(button.dataset.go);
+    if (button.classList.contains('u')) return openWord(button);
+    if (button.classList.contains('rec')) return toggleRec();
+    if (button.classList.contains('swap')) return swapLangs();
+    if (button.classList.contains('add')) return addCard(button);
+    if (button.classList.contains('show-btn')) return reveal();
+    if (button.dataset.r) return rate(Number(button.dataset.r));
+    if (button.classList.contains('again')) return restartDeck();
+    if (button.classList.contains('pick-tab')) {
+      app.querySelector('.note').textContent = 'Здесь браузер откроет выбор вкладки. Отметьте «Поделиться звуком».';
+    }
+  });
+
+  // Разделы
+  function go(key) {
+    app.querySelectorAll('.tab').forEach((t) => {
+      if (t.dataset.go === key) t.setAttribute('aria-current', 'page');
+      else t.removeAttribute('aria-current');
+    });
+    app.querySelectorAll('.screen').forEach((s) => { s.hidden = s.dataset.screen !== key; });
+    closeWord();
+    requestAnimationFrame(() => allSegs().forEach(placeThumb));
+  }
+  go(params.get('screen') || 'talk');
+
+  function swapLangs() {
+    const a = app.querySelector('.lang-a');
+    const b = app.querySelector('.lang-b');
+    [a.textContent, b.textContent] = [b.textContent, a.textContent];
+  }
+
+  // Лента
+  function nearBottom() {
+    return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
+  }
+
+  function stickToBottom(wasNear) {
+    if (wasNear && !state.selected) feed.scrollTop = feed.scrollHeight;
+  }
+
+  function addTurn(t, ready) {
+    const el = document.createElement('div');
+    el.className = `turn ${DIALOG[t].who}`;
+    el.innerHTML = turnInner(t, ready);
+    turns.appendChild(el);
+    return el;
+  }
+
+  function fillGlosses(el, t) {
+    const wasNear = nearBottom();
+    const turn = DIALOG[t];
+    el.querySelectorAll('.g').forEach((g, j) => {
+      g.className = 'g in';
+      g.style.setProperty('--d', `${j * 30}ms`);
+      g.textContent = turn.units[j][1];
+    });
+    const tr = el.querySelector('.tr');
+    tr.className = 'tr in';
+    tr.textContent = turn.tr;
+    stickToBottom(wasNear);
+  }
+
+  for (let i = 0; i < PRELOADED; i += 1) addTurn(i, true);
+  requestAnimationFrame(() => { feed.scrollTop = feed.scrollHeight; });
+
+  const timers = [];
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+
+  function tickDraft() {
+    if (!state.recording) return;
+    if (state.next >= DIALOG.length) {
+      draft.hidden = true;
+      return;
+    }
+    const turn = DIALOG[state.next];
+    const words = turn.text.split(' ');
+    const wasNear = nearBottom();
+    state.draftWords += 1;
+    draft.hidden = false;
+    draft.className = `draft turn ${turn.who}`;
+    draft.textContent = words.slice(0, state.draftWords).join(' ');
+    stickToBottom(wasNear);
+    if (state.draftWords < words.length) {
+      later(tickDraft, 260 + Math.random() * 200);
+      return;
+    }
+    later(() => {
+      if (!state.recording) return;
+      const near = nearBottom();
+      const t = state.next;
+      draft.hidden = true;
+      const el = addTurn(t, false);
+      stickToBottom(near);
+      state.next += 1;
+      state.draftWords = 0;
+      later(() => fillGlosses(el, t), 900);
+      later(tickDraft, 1400);
+    }, 700);
+  }
+  later(tickDraft, 900);
+
+  setInterval(() => {
+    if (!state.recording) return;
+    state.seconds += 1;
+    const m = String(Math.floor(state.seconds / 60)).padStart(2, '0');
+    const s = String(state.seconds % 60).padStart(2, '0');
+    app.querySelector('.timer').textContent = `${m}:${s}`;
+  }, 1000);
+
+  function setRec(on) {
+    state.recording = on;
+    app.toggleAttribute('data-rec', on);
+    app.querySelector('.rec-label').textContent = on ? 'Стоп' : 'Слушать';
+  }
+
+  function toggleRec() {
+    setRec(!state.recording);
+    if (state.recording) later(tickDraft, 400);
+    else draft.hidden = true;
+  }
+  setRec(true);
+
+  // Слово
+  const narrow = () => app.clientWidth < 720;
+
+  function wordHTML(t, u) {
+    const turn = DIALOG[t];
+    const [word, gloss] = turn.units[u];
+    const term = clean(word);
+    const lemma = LEMMA[term.toLowerCase()];
+    const added = state.added.has(`${t}:${u}`);
+    return `
+      <p class="wd-term" lang="es">${term}</p>
+      <p class="wd-meaning">${clean(gloss)}</p>
+      <dl class="wd-meta">
+        ${lemma ? `<div><dt>Словарная форма</dt><dd lang="es">${lemma}</dd></div>` : ''}
+        <div><dt>Во фразе</dt><dd lang="es">${turn.text}</dd><dd>${turn.tr}</dd></div>
+      </dl>
+      <button type="button" class="btn add" data-key="${t}:${u}"${added ? ' aria-disabled="true"' : ''}>${added ? I.check : I.plus}<span class="btn-label">${added ? 'Добавлено' : 'В карточки'}</span></button>`;
+  }
+
+  function markSelected(unit) {
+    app.querySelectorAll('.u[aria-expanded="true"]').forEach((u) => u.setAttribute('aria-expanded', 'false'));
+    if (unit) unit.setAttribute('aria-expanded', 'true');
+    state.selected = unit;
+  }
+
+  function openWord(unit) {
+    if (unit.querySelector('.g.pending')) return;
+    if (state.selected === unit && !narrow()) return closeWord();
+    const html = wordHTML(Number(unit.dataset.t), Number(unit.dataset.u));
+    markSelected(unit);
+    if (narrow()) {
+      app.querySelector('.sheet-body').innerHTML = html;
+      app.setAttribute('data-sheet', '');
+      return;
+    }
+    popover.querySelector('.pop-body').innerHTML = html;
+    popover.classList.remove('open');
+    placePopover(unit);
+    requestAnimationFrame(() => popover.classList.add('open'));
+  }
+
+  function placePopover(unit) {
+    const appBox = app.getBoundingClientRect();
+    const box = unit.getBoundingClientRect();
+    const width = 320;
+    const center = box.left - appBox.left + box.width / 2;
+    const left = Math.min(Math.max(center - width / 2, 12), app.clientWidth - width - 12);
+    popover.style.left = `${left}px`;
+    popover.style.top = '0px';
+    const height = popover.offsetHeight;
+    let top = box.bottom - appBox.top + 10;
+    let originY = 'top';
+    if (top + height > app.clientHeight - 12) {
+      top = box.top - appBox.top - height - 10;
+      originY = 'bottom';
+    }
+    popover.style.top = `${top}px`;
+    popover.style.transformOrigin = `${center - left}px ${originY}`;
+  }
+
+  feed.addEventListener('scroll', () => {
+    if (popover.classList.contains('open') && state.selected) placePopover(state.selected);
+  }, { passive: true });
+
+  function closeWord() {
+    markSelected(null);
+    app.removeAttribute('data-sheet');
+    popover.classList.remove('open');
+  }
+
+  app.querySelector('.scrim').addEventListener('click', closeWord);
+  document.addEventListener('pointerdown', (event) => {
+    if (!popover.classList.contains('open')) return;
+    if (popover.contains(event.target) || event.target.closest('.u')) return;
+    closeWord();
+  });
+
+  function addCard(button) {
+    const key = button.dataset.key;
+    if (state.added.has(key)) return;
+    state.added.add(key);
+    const [t, u] = key.split(':').map(Number);
+    const turn = DIALOG[t];
+    const [word, gloss] = turn.units[u];
+    const term = clean(word);
+    state.deck.push({ term, ex: turn.text.replace(term, `<mark>${term}</mark>`), meaning: clean(gloss), tr: turn.tr });
+    state.queue.push(state.deck.length - 1);
+    updateBadge();
+    updateProgress();
+    button.classList.add('morph');
+    later(() => {
+      button.querySelector('.btn-label').textContent = 'Добавлено';
+      button.querySelector('svg').outerHTML = I.check;
+      button.setAttribute('aria-disabled', 'true');
+      button.classList.remove('morph');
+    }, 140);
+  }
+
+  // Лист слова закрывается движением вниз
+  let drag = null;
+  sheet.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('button')) return;
+    drag = { y: event.clientY, t: performance.now(), dy: 0 };
+    sheet.setPointerCapture(event.pointerId);
+    sheet.classList.add('dragging');
+  });
+  sheet.addEventListener('pointermove', (event) => {
+    if (!drag) return;
+    drag.dy = event.clientY - drag.y;
+    const offset = drag.dy >= 0 ? drag.dy : -Math.sqrt(-drag.dy) * 2;
+    sheet.style.transform = `translateY(${offset}px)`;
+  });
+  const endDrag = () => {
+    if (!drag) return;
+    const velocity = drag.dy / (performance.now() - drag.t);
+    sheet.classList.remove('dragging');
+    sheet.style.transform = '';
+    if (drag.dy > 120 || velocity > 0.11) closeWord();
+    drag = null;
+  };
+  sheet.addEventListener('pointerup', endDrag);
+  sheet.addEventListener('pointercancel', endDrag);
+
+  // Карточки
+  function updateBadge() {
+    badge.textContent = state.queue.length;
+    badge.hidden = state.queue.length === 0;
+  }
+
+  function updateProgress() {
+    const total = state.done.length + state.queue.length;
+    const position = state.queue.length ? state.done.length + 1 : total;
+    app.querySelector('.progress-text').textContent = `${position} из ${total}`;
+    slot.dataset.left = String(Math.min(state.queue.length, 3));
+  }
+
+  function renderCard() {
+    updateProgress();
+    if (!state.queue.length) {
+      slot.innerHTML = '<div class="done"><h2>На сегодня всё</h2><p>Следующие карточки появятся завтра.</p><button type="button" class="btn btn-quiet again">Повторить ещё раз</button></div>';
+      showBtn.hidden = true;
+      rateRow.hidden = true;
+      return;
+    }
+    const card = state.deck[state.queue[0]];
+    slot.innerHTML = `
+      <article class="card" tabindex="0" aria-label="Карточка, нажмите, чтобы увидеть ответ">
+        <p class="term" lang="es">${card.term}</p>
+        <p class="ex" lang="es">${card.ex}</p>
+        <div class="back"><p class="meaning">${card.meaning}</p><p class="ex-tr">${card.tr}</p><p class="src">Из разговора 12 ноября</p></div>
+      </article>`;
+    showBtn.hidden = false;
+    rateRow.hidden = true;
+  }
+
+  function reveal() {
+    const card = slot.querySelector('.card');
+    if (!card || card.classList.contains('revealed')) return;
+    card.classList.add('revealed');
+    showBtn.hidden = true;
+    rateRow.hidden = false;
+  }
+
+  function rate(r) {
+    const card = slot.querySelector('.card');
+    if (!card || !card.classList.contains('revealed') || card.classList.contains('out')) return;
+    const index = state.queue.shift();
+    if (r === 0) state.queue.push(index);
+    else state.done.push(index);
+    updateBadge();
+    card.classList.add('out');
+    later(renderCard, 160);
+  }
+
+  function restartDeck() {
+    state.queue = state.done.splice(0);
+    updateBadge();
+    renderCard();
+  }
+
+  slot.addEventListener('click', (event) => {
+    if (event.target.closest('.card')) reveal();
+  });
+  updateBadge();
+  renderCard();
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeWord();
+    const studyOpen = !app.querySelector('[data-screen="study"]').hidden;
+    if (event.key === ' ' && studyOpen && event.target.tagName !== 'BUTTON') {
+      event.preventDefault();
+      reveal();
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    allSegs().forEach(placeThumb);
+    if (!narrow()) app.removeAttribute('data-sheet');
+    else popover.classList.remove('open');
+  });
+}
+
+start();
+</script>
+</body>
+</html>
