@@ -1,0 +1,20 @@
+{
+  "name": "claro-local-captions",
+  "version": "0.11.0",
+  "description": "Local speech captions and configurable translation for extensible language-learning clients",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "mobile": "node scripts/mobile.mjs",
+    "remote": "node scripts/remote.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "setup:translation:mac": "node scripts/setup-translation.mjs",
+    "setup:qwen:mac": "node scripts/setup-qwen.mjs",
+    "benchmark:asr": "node scripts/benchmark-asr.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
