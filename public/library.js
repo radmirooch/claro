@@ -69,7 +69,7 @@ export function configureLibrary() {
   const supported = Boolean(state.config?.features?.sessions);
   $('legacyHistory').hidden = supported;
   $('library').hidden = !supported;
-  $('captureBar').hidden = supported && !$('historyPanel').hidden;
+  $('captureBar').hidden = state.panel === 'cards' || (supported && !$('historyPanel').hidden);
   const available = savingEnabled();
   const changed = available !== savingAvailable;
   if (changed) {
@@ -213,7 +213,9 @@ export async function openSavedConversation(id) {
     const result = await sessionRequest(`/api/sessions/${id}`);
     if (version !== requestVersion || !savingEnabled())
       return;
-    savedTurns = [...result.turns].sort((a, b) => a.seq - b.seq).map(restoredTurn);
+    savedTurns = [...result.turns]
+      .sort((a, b) => a.seq - b.seq)
+      .map(turn => ({ ...restoredTurn(turn), session_id: result.session.id }));
     selected = { ...result.session, preview: savedTurns[0]?.text };
     savedRows.clear();
     $('libraryMessages').replaceChildren();

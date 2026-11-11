@@ -10,11 +10,13 @@ import { initializeAppInstall, pairChanged, layoutChanged, setPanel, health, rec
 import { initializePersistence, newConversation, deleteConversation } from './persistence.js';
 import { initializeLibrary, configureLibrary, openLibrary, renderLibrary } from './library.js';
 import { initializeWatch } from './watch.js';
+import { initializeCards } from './cards.js';
 
 loadPreferences();
 initializeSheets();
 initializeLibrary();
 initializeWatch();
+initializeCards();
 initializeAppInstall();
 
 for (const id of ['theme', 'palette'])
@@ -140,6 +142,7 @@ $('display').onclick = () => {
 };
 $('conversationTab').onclick = () => setPanel('reader');
 $('historyTab').onclick = () => setPanel('history');
+$('cardsTab').onclick = () => setPanel('cards');
 $('openSettings').onclick = () => $('settingsDialog').showModal();
 $('closeSettings').onclick = () => $('settingsDialog').close();
 $('lineMode').onclick = () => {

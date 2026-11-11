@@ -4,6 +4,7 @@ import { renderAnnotated, sourceUnits, validateGlosses } from './annotations.js'
 import { renderConversation } from './render.js';
 import { requestTranslation } from './translation-jobs.js';
 import { requestGloss } from './gloss-jobs.js';
+import { prepareWordCard } from './cards.js';
 
 export function showTranslation() {
   renderConversation();
@@ -20,9 +21,11 @@ export function refreshWordPeek() {
     return;
   }
   const unit = sourceUnits(event.text)[state.wordPeek.index],
-    meaning = validateGlosses(event.text, event.glosses, state.wordPeek.record ? 300 : undefined).find(
+    span = validateGlosses(event.text, event.glosses, state.wordPeek.record ? 300 : undefined).find(
       span => span.start < unit.end && span.end > unit.start
-    )?.meaning;
+    );
+  const meaning = span?.meaning;
+  prepareWordCard(event, span);
   $('wordPhrase').textContent = event.text;
   setLanguage($('wordPhrase'), event.source_language);
   $('wordTranslation').textContent = event.translation || '';

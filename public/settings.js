@@ -11,6 +11,7 @@ import { requestTranslation, cancelTranslations } from './translation-jobs.js';
 import { queueExistingGlosses, cancelGlosses } from './gloss-jobs.js';
 import { initializePersistence } from './persistence.js';
 import { configureLibrary, openLibrary, renderLibrary } from './library.js';
+import { configureCards, openCards, leaveCards } from './cards.js';
 
 export function pairChanged() {
   $('settingsLanguage').value = $('language').value;
@@ -56,6 +57,10 @@ export function download(json, captions = state.history, participants = state.pa
 }
 
 export function setPanel(panel) {
+  if (panel === 'cards' && !state.config?.features?.cards)
+    return;
+  if (state.panel === 'cards' && panel !== 'cards')
+    leaveCards();
   if (panel === 'watch' && !navigator.mediaDevices?.getDisplayMedia)
     return;
   state.panel = panel;
@@ -67,7 +72,11 @@ export function setPanel(panel) {
   $('conversationTab').setAttribute('aria-pressed', String(panel === 'reader'));
   $('historyTab').setAttribute('aria-pressed', String(panel === 'history'));
   $('watchTab').setAttribute('aria-pressed', String(panel === 'watch'));
+  $('cardsTab').setAttribute('aria-pressed', String(panel === 'cards'));
   configureLibrary();
+  configureCards();
+  if (panel === 'cards')
+    return openCards();
   if (panel === 'history') {
     if (state.config?.features?.sessions)
       return openLibrary();
@@ -123,6 +132,9 @@ export async function health() {
     if (!state.running && !state.starting && !state.demoActive)
       status(recognitionStatus());
     controls();
+    configureCards();
+    if (state.panel === 'cards' && !state.config?.features?.cards)
+      setPanel('reader');
     await initializePersistence();
     if (configureLibrary() && !$('historyPanel').hidden && state.config?.features?.sessions)
       openLibrary();

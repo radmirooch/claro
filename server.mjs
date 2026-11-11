@@ -14,6 +14,7 @@ import { LANGUAGES, languageByCode } from './public/languages.js';
 import { MODULES } from './public/modules.js';
 import { SessionStore } from './lib/sessions.mjs';
 import { sessionRoute } from './lib/session-api.mjs';
+import { cardRoute } from './lib/card-api.mjs';
 
 const root = new URL('./public/', import.meta.url);
 const assets = {
@@ -36,6 +37,7 @@ const assets = {
   '/settings.js': ['settings.js', 'text/javascript'],
   '/persistence.js': ['persistence.js', 'text/javascript'],
   '/library.js': ['library.js', 'text/javascript'],
+  '/cards.js': ['cards.js', 'text/javascript'],
   '/participant-settings.js': ['participant-settings.js', 'text/javascript'],
   '/demo.js': ['demo.js', 'text/javascript'],
   '/live.js': ['live.js', 'text/javascript'],
@@ -128,6 +130,7 @@ export function createApp({
           storage: { enabled: Boolean(store) },
           features: {
             sessions: Boolean(store),
+            cards: Boolean(store),
             translation_streaming: true,
             live_translation: true,
             live_glosses: true,
@@ -154,6 +157,13 @@ export function createApp({
           subscribers.delete(res);
         });
         return;
+      }
+      if (url.pathname.startsWith('/api/cards')) {
+        if (!store)
+          throw fail(404, 'Не найдено.');
+        if (req.headers['x-session-token'] !== token)
+          throw fail(403, 'Нужен токен сессии.');
+        return json(200, await cardRoute(req, url, store));
       }
       if (url.pathname.startsWith('/api/sessions')) {
         if (!store)

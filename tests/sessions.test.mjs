@@ -59,7 +59,7 @@ function api(store) {
 test('session store migrates an empty database and enables foreign keys', () => {
   const store = new SessionStore(':memory:');
   try {
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 1);
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 2);
     assert.equal(store.db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
     assert.deepEqual(store.listSessions(), []);
     assert.equal(store.latestActive(120), null);
@@ -129,7 +129,7 @@ test('session store survives reopening a file with WAL and preserves the schema 
     assert.equal(store.db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
     store.close();
     store = new SessionStore(path);
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 1);
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 2);
     assert.equal(store.getSession(session.id).turns[0].text, turn().text);
   } finally {
     store?.close();

@@ -1463,3 +1463,232 @@ test('unsupported browsers explain why an active watch cannot be continued from 
   assert.equal(h.element('libraryContinue').title, 'Звук вкладки работает в Chrome и Edge на компьютере');
   assert.match(h.element('libraryMessages').textContent, /Una.*mesa/);
 });
+
+async function cardClientHarness({ initialCards = [], ...options } = {}) {
+  const h = await harness({ ...options, configOverride: { features: { sessions: true, cards: true } } });
+  h.run(`
+    window.cardRequests = [];
+    window.testCards = ${JSON.stringify(initialCards)};
+    window.cardFailure = false;
+    window.baseFetch = fetch;
+    fetch = async (path, options = {}) => {
+      if (!path.startsWith('/api/cards'))
+        return window.baseFetch(path, options);
+      const input = options.body ? JSON.parse(options.body) : undefined;
+      window.cardRequests.push({path, method:options.method, headers:options.headers, input});
+      if (window.cardFailure)
+        return {ok:false};
+      const labels = {again:'10 мин',hard:'1 д',good:'1 д',easy:'1 д'};
+      let result;
+      if (options.method === 'GET') {
+        const due = window.testCards.filter(card => Date.parse(card.due_at) <= Date.now());
+        const next = window.testCards.filter(card => Date.parse(card.due_at) > Date.now()).map(card => card.due_at).sort()[0];
+        result = {cards:path.includes('due=1') ? due : window.testCards,
+          stats:{total:window.testCards.length,due:due.length,next_due_at:next || null}};
+      } else if (path.endsWith('/review')) {
+        const card = window.testCards.find(card => path.includes(card.id));
+        card.due_at = new Date(Date.now() + 86400000).toISOString();
+        result = card;
+      } else if (options.method === 'POST') {
+        result = window.testCards.find(card => card.source.toLowerCase() === input.source.toLowerCase());
+        if (!result) {
+          result = {...input,id:'card-'+window.testCards.length,due_at:'2020-01-01T00:00:00.000Z',review_labels:labels};
+          window.testCards.push(result);
+        }
+      } else if (options.method === 'PATCH') {
+        result = window.testCards.find(card => path.endsWith(card.id));
+        Object.assign(result, input);
+      } else if (options.method === 'DELETE') {
+        window.testCards = window.testCards.filter(card => !path.endsWith(card.id));
+        result = {ok:true};
+      }
+      return {ok:true,json:async () => structuredClone(result)};
+    };
+  `);
+  return h;
+}
+
+const clientCard = (id = 'card-1') => ({
+  id, source: 'mesa', meaning: 'стол', source_language: 'es', target_language: 'ru',
+  example: 'Una mesa.', example_translation: 'Стол.', due_at: '2020-01-01T00:00:00.000Z',
+  review_labels: { again: '10 мин', hard: '1 д', good: '1 д', easy: '1 д' }
+});
+
+test('В карточки sends the selected expression, full example, translation and source IDs with a token', async () => {
+  const h = await cardClientHarness();
+  h.run(`
+    sessionId = 'current-session';
+    show({id:'card-turn',text:'Una mesa.',translation:'Стол.',source_language:'es',target_language:'ru',
+      final:true,gloss_status:'ready',glosses:[{index:1,source:'mesa.',meaning:'стол'}]});
+    peekWord(messages.get('card-turn'),1);
+  `);
+  assert.equal(h.element('wordAddCard').hidden, false);
+  await h.element('wordAddCard').onclick();
+  const request = JSON.parse(h.run('JSON.stringify(window.cardRequests[0])'));
+  assert.equal(request.path, '/api/cards');
+  assert.equal(request.method, 'POST');
+  assert.equal(request.headers['X-Session-Token'], 'test');
+  assert.deepEqual(request.input, {
+    source: 'mesa', meaning: 'стол', source_language: 'es', target_language: 'ru',
+    example: 'Una mesa.', example_translation: 'Стол.', session_id: 'current-session', turn_id: 'card-turn'
+  });
+  assert.equal(h.element('wordAddCard').textContent, 'В карточках');
+  assert.equal(h.element('wordAddCard').disabled, true);
+  await h.element('wordAddCard').onclick();
+  assert.equal(h.run('window.cardRequests.length'), 1);
+});
+
+test('saved library cards keep the saved session identity instead of the active conversation identity', async () => {
+  const fixture = libraryFixture();
+  const h = await cardClientHarness({ sessionResponder: fixture.respond });
+  h.run("sessionId = 'another-active-session'");
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  h.element('libraryMessages').children[0].children[0].children[0].children[0].onclick();
+  await h.element('wordAddCard').onclick();
+  assert.equal(h.run('window.cardRequests[0].input.session_id'), fixture.session.id);
+  assert.equal(h.run('window.cardRequests[0].input.turn_id'), fixture.turns[0].id);
+  assert.equal(h.run('window.cardRequests[0].input.example'), fixture.turns[0].text);
+});
+
+test('card creation errors allow retry and unsupported storage hides both card entry points', async () => {
+  const h = await cardClientHarness();
+  h.run(`
+    const record = {id:'word-error',text:'Una mesa.',source_language:'es',target_language:'ru',translation:'Стол.',
+      glosses:[{index:0,source:'Una',meaning:'одна'}],gloss_status:'ready'};
+    peekWord(record,0,null,true);
+    window.cardFailure = true;
+  `);
+  await h.element('wordAddCard').onclick();
+  assert.match(h.element('wordCardError').textContent, /Не удалось/);
+  assert.equal(h.element('wordAddCard').disabled, false);
+  h.run('window.cardFailure = false');
+  await h.element('wordAddCard').onclick();
+  assert.equal(h.element('wordAddCard').textContent, 'В карточках');
+  const unsupported = await harness();
+  assert.equal(unsupported.element('wordAddCard').hidden, true);
+  assert.equal(unsupported.element('cardsTab').hidden, true);
+  await unsupported.element('cardsTab').onclick();
+  assert.equal(unsupported.run('panel'), 'reader');
+});
+
+test('review reveals the complete answer and posts each grade, then shows the next due date', async () => {
+  const h = await cardClientHarness({ initialCards: ['one', 'two', 'three', 'four'].map(clientCard) });
+  await h.element('cardsTab').onclick();
+  assert.equal(h.element('cardsDue').textContent, 'На сегодня: 4');
+  assert.equal(h.element('captureBar').hidden, true);
+  assert.equal(h.element('cardsTab').attributes['aria-pressed'], 'true');
+  await h.element('cardsStart').onclick();
+  assert.equal(h.element('cardAnswer').hidden, true);
+  assert.equal(h.element('cardGrades').hidden, true);
+  assert.equal(h.element('cardSource').textContent, 'mesa');
+  assert.equal(h.element('cardExample').children[1].textContent, 'mesa');
+  await h.element('cardGrade3').onclick();
+  assert.equal(h.run("window.cardRequests.filter(request => request.path.endsWith('/review')).length"), 0);
+  for (const index of [1, 2, 3, 4]) {
+    h.element('cardFace').onclick();
+    assert.equal(h.element('cardMeaning').textContent, 'стол');
+    assert.equal(h.element('cardExampleTranslation').textContent, 'Стол.');
+    assert.equal(h.element('cardAnswer').hidden, false);
+    assert.match(h.element('cardGrade1').textContent, /10 мин/);
+    await h.element(`cardGrade${index}`).onclick();
+  }
+  const reviews = JSON.parse(h.run("JSON.stringify(window.cardRequests.filter(request => request.path.endsWith('/review')))"));
+  assert.deepEqual(reviews.map(request => request.input.grade), ['again', 'hard', 'good', 'easy']);
+  assert.ok(reviews.every(request => request.method === 'POST' && request.headers['X-Session-Token'] === 'test'));
+  assert.equal(h.element('cardsFinished').hidden, false);
+  assert.match(h.element('cardsNext').textContent, /Следующее повторение/);
+  assert.equal(h.element('cardsStart').hidden, true);
+});
+
+test('review keyboard shortcuts reveal with space and save grades with 1–4 only inside review', async () => {
+  const h = await cardClientHarness({ initialCards: [clientCard()] });
+  await h.element('cardsTab').onclick();
+  await h.element('cardsStart').onclick();
+  const keydown = h.windowListeners.get('keydown');
+  keydown({ key: '3', preventDefault() {} });
+  assert.equal(h.run("window.cardRequests.filter(request => request.path.endsWith('/review')).length"), 0);
+  keydown({ key: ' ', preventDefault() {} });
+  assert.equal(h.element('cardAnswer').hidden, false);
+  keydown({ key: '4', preventDefault() {} });
+  await h.settle();
+  assert.equal(h.run('window.cardRequests.find(request => request.path.endsWith("/review")).input.grade'), 'easy');
+  h.element('conversationTab').onclick();
+  keydown({ key: '1', preventDefault() {} });
+  assert.equal(h.run("window.cardRequests.filter(request => request.path.endsWith('/review')).length"), 1);
+});
+
+test('card list edits and deletes records, keeps full text and handles empty and failed states', async () => {
+  const h = await cardClientHarness({ initialCards: [clientCard()] });
+  await h.element('cardsTab').onclick();
+  let row = h.element('cardsList').children[0];
+  row.children[3].children[0].onclick();
+  const form = row.children[0];
+  form.children[0].children[0].value = 'mesa nueva';
+  form.children[1].children[0].value = 'новый стол';
+  await form.onsubmit({ preventDefault() {} });
+  assert.equal(h.run("window.cardRequests.find(request => request.method === 'PATCH').input.source"), 'mesa nueva');
+  row = h.element('cardsList').children[0];
+  assert.match(row.textContent, /mesa nuevaновый стол/);
+  await row.children[3].children[1].onclick();
+  assert.equal(h.element('cardsEmpty').hidden, false);
+  h.run('window.cardFailure = true');
+  await h.run('openCards()');
+  assert.match(h.element('cardsError').textContent, /Не удалось/);
+  h.run('window.cardFailure = false');
+  await h.element('cardsRetry').onclick();
+  assert.equal(h.element('cardsError').textContent, '');
+});
+
+test('a failed review preserves its answer for retry and concurrent grade clicks send only one request', async () => {
+  const h = await cardClientHarness({ initialCards: [clientCard()] });
+  await h.element('cardsTab').onclick();
+  await h.element('cardsStart').onclick();
+  h.element('cardReveal').onclick();
+  h.run('window.cardFailure = true');
+  await h.element('cardGrade3').onclick();
+  assert.equal(h.element('cardAnswer').hidden, false);
+  assert.equal(h.element('cardGrade3').disabled, false);
+  assert.match(h.element('cardsError').textContent, /Не удалось сохранить оценку/);
+  h.run(`
+    window.cardFailure = false;
+    window.reviewFetch = fetch;
+    fetch = async (path, options) => {
+      if (path.endsWith('/review'))
+        await new Promise(resolve => { window.finishReview = resolve; });
+      return window.reviewFetch(path, options);
+    };
+  `);
+  const first = h.element('cardGrade3').onclick();
+  const second = h.element('cardGrade4').onclick();
+  assert.equal(h.element('cardGrade3').disabled, true);
+  h.run('window.finishReview()');
+  await Promise.all([first, second]);
+  const reviews = JSON.parse(h.run("JSON.stringify(window.cardRequests.filter(request => request.path.endsWith('/review')))"));
+  assert.deepEqual(reviews.map(request => request.input.grade), ['good', 'good']);
+  assert.equal(h.element('cardsFinished').hidden, false);
+});
+
+test('leaving cards during a review request ignores its late response without reopening the section', async () => {
+  const h = await cardClientHarness({ initialCards: [clientCard()] });
+  await h.element('cardsTab').onclick();
+  await h.element('cardsStart').onclick();
+  h.element('cardReveal').onclick();
+  h.run(`
+    window.reviewFetch = fetch;
+    fetch = async (path, options) => {
+      if (path.endsWith('/review'))
+        await new Promise(resolve => { window.finishReview = resolve; });
+      return window.reviewFetch(path, options);
+    };
+  `);
+  const pending = h.element('cardGrade2').onclick();
+  h.element('conversationTab').onclick();
+  h.run('window.finishReview()');
+  await pending;
+  assert.equal(h.run('panel'), 'reader');
+  assert.equal(h.element('cardsPanel').hidden, true);
+  assert.equal(h.element('readerPanel').hidden, false);
+  await h.element('cardsTab').onclick();
+  assert.equal(h.element('cardsFinished').hidden, false);
+});

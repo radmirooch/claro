@@ -57,6 +57,12 @@
               Библиотека
             </span>
           </button>
+          <button id="cardsTab" aria-pressed="false" hidden>
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="5" y="6" width="15" height="15" rx="2"/><path d="M16 3H4a1 1 0 0 0-1 1v12 M9 11h7 M9 15h5"/></svg>
+            </span>
+            <span>Карточки</span>
+          </button>
         </nav>
         <span id="watchUnavailable" class="watch-unavailable" role="status" hidden></span>
         <div class="toolbar-end">
@@ -225,6 +231,44 @@
               </div>
               <p id="libraryActionError" role="status" hidden></p>
               <div id="libraryMessages" class="message-list library-messages" aria-label="Сохранённые реплики"></div>
+            </div>
+          </div>
+        </section>
+        <section id="cardsPanel" class="cards-panel" hidden aria-label="Карточки">
+          <h1>Карточки</h1>
+          <p id="cardsLoading" role="status" hidden>Загрузка…</p>
+          <p id="cardsError" role="status"></p>
+          <button id="cardsRetry" class="quiet" hidden>Повторить</button>
+          <div id="cardsOverview">
+            <div class="cards-summary">
+              <p id="cardsDue">На сегодня: 0</p>
+              <button id="cardsStart" class="primary" hidden>Повторить</button>
+              <p id="cardsEmpty" class="empty">Нажмите на слово в разговоре и выберите „В карточки“</p>
+              <div id="cardsFinished" hidden>
+                <h2>На сегодня всё</h2>
+                <p id="cardsNext"></p>
+              </div>
+            </div>
+            <div id="cardsList" aria-label="Все карточки"></div>
+          </div>
+          <div id="cardsReview" hidden>
+            <button id="cardsBack" class="quiet">← К списку</button>
+            <article class="review-card">
+              <button id="cardFace" class="card-face" aria-expanded="false" aria-controls="cardAnswer">
+                <span id="cardSource" class="card-source"></span>
+                <span id="cardExample" class="card-example"></span>
+              </button>
+              <div id="cardAnswer" hidden>
+                <p id="cardMeaning" class="card-meaning"></p>
+                <p id="cardExampleTranslation" class="card-example"></p>
+              </div>
+            </article>
+            <button id="cardReveal" class="quiet card-reveal">Показать значение · пробел</button>
+            <div id="cardGrades" class="card-grades" hidden>
+              <button id="cardGrade1" class="quiet" aria-keyshortcuts="1">Снова</button>
+              <button id="cardGrade2" class="quiet" aria-keyshortcuts="2">Трудно</button>
+              <button id="cardGrade3" class="quiet" aria-keyshortcuts="3">Хорошо</button>
+              <button id="cardGrade4" class="quiet" aria-keyshortcuts="4">Легко</button>
             </div>
           </div>
         </section>
@@ -580,6 +624,8 @@
       </p>
       <p id="wordTranslation" class="word-translation" dir="auto">
       </p>
+      <button id="wordAddCard" class="quiet" hidden>В карточки</button>
+      <p id="wordCardError" role="status"></p>
     </dialog>
     <noscript>
       Для локального распознавания и перевода включи JavaScript в браузере.
