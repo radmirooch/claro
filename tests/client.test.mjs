@@ -7,11 +7,32 @@ import {sourceUnits} from '../public/annotations.js';
 
 async function harness({live=false,streaming=false,glossStreaming=false,sessions=false,activeSession=null,preferences={},sessionResponder,confirmDelete=true} = {}) {
   const elements = new Map();
+  function createClassList() {
+    return {
+      toggle(name, force) {
+        const names = new Set((this.owner.className || '').split(' ').filter(Boolean));
+        const on = force ?? !names.has(name);
+        if (on)
+          names.add(name);
+        else
+          names.delete(name);
+        this.owner.className = [...names].join(' ');
+        return on;
+      },
+      add(name) { this.toggle(name, true); },
+      remove(name) { this.toggle(name, false); },
+      contains(name) { return (this.owner.className || '').split(' ').includes(name); }
+    };
+  }
+
   const element = id => {
-    if (!elements.has(id)) elements.set(id,{value:'',_text:'',get textContent(){return this.children.length ? this.children.map(n=>n.textContent).join('') : this._text;},set textContent(v){this._text=v;this.children=[];},hidden:false,disabled:false,options:[],children:[],attributes:{},scrollTop:0,scrollHeight:1000,clientHeight:400,classList:{toggle(){}},add(option){this.options.push(option);},append(...items){for(const item of items){item.parent=this;this.children.push(item);}},remove(){if(this.parent)this.parent.children=this.parent.children.filter(x=>x!==this);},replaceChildren(){this.children=[];},setAttribute(k,v){this.attributes[k]=v;},showModal(){},close(){}});
+    if (!elements.has(id)) elements.set(id,{value:'',_text:'',get textContent(){return this.children.length ? this.children.map(n=>n.textContent).join('') : this._text;},set textContent(v){this._text=v;this.children=[];},hidden:false,disabled:false,options:[],children:[],attributes:{},scrollTop:0,scrollHeight:1000,clientHeight:400,classList:createClassList(),add(option){this.options.push(option);},append(...items){for(const item of items){item.parent=this;this.children.push(item);}},remove(){if(this.parent)this.parent.children=this.parent.children.filter(x=>x!==this);},replaceChildren(){this.children=[];},setAttribute(k,v){this.attributes[k]=v;},showModal(){},close(){}});
+    elements.get(id).classList.owner = elements.get(id);
     return elements.get(id);
   };
-  for (const [id,value] of Object.entries({engine:'qwen',interval:'1.5',threshold:'.012',translationMode:'always',translationLayout:'line',showOriginal:'show',showParticipants:'hide',textSize:'normal',readingMode:'live',saveConversations:'on'})) {element(id).value=value; element(id).options=[{value}];}
+  for (const [id,value] of Object.entries({engine:'qwen',interval:'1.5',threshold:'.012',translationMode:'always',translationLayout:'line',showOriginal:'show',showParticipants:'hide',textSize:'normal',theme:'auto',palette:'graphite',readingMode:'live',saveConversations:'on'})) {element(id).value=value; element(id).options=[{value}];}
+  element('theme').options = ['auto','light','dark'].map(value => ({value}));
+  element('palette').options = ['graphite','sand','sage','ocean','lilac'].map(value => ({value}));
   element('saveConversations').options = [{value:'on'}, {value:'off'}];
   element('historyPanel').hidden=true;
   const requests=[], pending=[];
@@ -547,4 +568,109 @@ test('word meanings and speaker corrections update the complete persisted turn',
   assert.equal(saved.glosses.length, 2);
   assert.equal(saved.translation_status, 'ready');
   assert.equal(saved.revision, 4);
+});
+
+test('feed keeps self alignment with hidden participants and groups consecutive speakers', async () => {
+  const h = await harness();
+  h.element('translationMode').value = 'off';
+  h.run(`
+    for (const [id, speaker_id] of [['first','self'], ['second','self'], ['third','guest']])
+      show({id, speaker_id, text:'Una frase.', source_language:'es', target_language:'ru', final:true}, false);
+  `);
+  const rows = h.element('messageList').children;
+  assert.ok(rows[0].classList.contains('self-message'));
+  assert.ok(rows[1].classList.contains('self-message'));
+  assert.ok(rows[1].classList.contains('same-speaker'));
+  assert.equal(rows[2].classList.contains('self-message'), false);
+  assert.equal(rows[2].classList.contains('same-speaker'), false);
+  assert.ok(rows.every(row => !row.children.some(node => node.className === 'message-meta')));
+  h.element('showParticipants').value = 'show';
+  h.element('showParticipants').onchange();
+  assert.ok(rows.every(row => row.children[0].className === 'message-meta'));
+  assert.ok(rows[1].classList.contains('same-speaker'));
+});
+
+test('word window includes phrase context and one meaning for a whole expression', async () => {
+  const h = await harness();
+  h.element('translationLayout').value = 'words';
+  h.run(`show({id:'expression',demo:true,text:'¿Nos vemos mañana?',translation:'Увидимся завтра?',
+    source_language:'es',target_language:'ru',final:true,translation_status:'ready',gloss_status:'ready',
+    glosses:[{source:'Nos vemos',meaning:'увидимся'},{source:'mañana?',meaning:'завтра?'}]},false)`);
+  const original = h.element('messageList').children[0].children[0];
+  assert.equal(original.children.length, 2);
+  assert.equal(original.children[0].children[0].textContent, '¿Nos vemos');
+  assert.equal(original.children[0].children[1].textContent, 'увидимся');
+  original.children[0].children[0].onclick();
+  assert.equal(h.element('wordMeaning').textContent, 'увидимся');
+  assert.equal(h.element('wordPhrase').textContent, '¿Nos vemos mañana?');
+  assert.equal(h.element('wordTranslation').textContent, 'Увидимся завтра?');
+});
+
+test('recording capsule reads the meter and resets its tabular timer after stop', async () => {
+  const h = await harness();
+  assert.equal(h.element('listenLabel').textContent, 'Слушать');
+  await h.run('start()');
+  assert.equal(h.element('listenLabel').textContent, 'Стоп');
+  h.element('meter').value = 0.08;
+  h.run('updateRecordingIndicator(1000); updateRecordingIndicator(66000);');
+  assert.equal(h.element('recordingTime').textContent, '01:05');
+  assert.equal(h.element('soundLevel').attributes['data-level'], '4');
+  h.run('stop(); updateRecordingIndicator(67000);');
+  assert.equal(h.element('listenLabel').textContent, 'Слушать');
+  assert.equal(h.element('recordingTime').textContent, '00:00');
+  assert.equal(h.element('soundLevel').attributes['data-level'], '0');
+});
+
+test('appearance settings preserve saved values alongside conversation storage preferences', async () => {
+  const h = await harness({preferences:{theme:'dark',palette:'sage',saveConversations:'off'}});
+  assert.equal(h.element('theme').value, 'dark');
+  assert.equal(h.element('palette').value, 'sage');
+  assert.equal(h.element('saveConversations').value, 'off');
+  h.run(`window.claroAppearance = {apply(theme,palette){window.appliedAppearance = [theme,palette];}};`);
+  h.run(`localStorage.setItem = (key,value) => {window.savedPreferences = JSON.parse(value);};`);
+  h.element('palette').value = 'ocean';
+  h.element('palette').onchange();
+  assert.deepEqual(Array.from(h.run('window.appliedAppearance')), ['dark','ocean']);
+  assert.equal(h.run('window.savedPreferences.theme'), 'dark');
+  assert.equal(h.run('window.savedPreferences.palette'), 'ocean');
+  assert.equal(h.run('window.savedPreferences.saveConversations'), 'off');
+});
+
+test('language selectors in settings mirror the feed and capture availability', async () => {
+  const h = await harness();
+  assert.equal(h.element('settingsLanguage').value, 'es');
+  assert.equal(h.element('settingsTargetLanguage').value, 'ru');
+  h.element('settingsLanguage').value = 'en';
+  h.element('settingsLanguage').onchange();
+  assert.equal(h.element('language').value, 'en');
+  h.element('swap').onclick();
+  assert.equal(h.element('settingsLanguage').value, 'ru');
+  assert.equal(h.element('settingsTargetLanguage').value, 'en');
+  await h.run('start()');
+  assert.equal(h.element('settingsLanguage').disabled, true);
+  assert.equal(h.element('settingsTargetLanguage').disabled, true);
+  h.run('stop()');
+  assert.equal(h.element('settingsLanguage').disabled, false);
+});
+
+test('translation errors retain the source and expose a retry in the last action row', async () => {
+  const h = await harness();
+  h.run(`show({id:'failed',text:'Una frase.',source_language:'es',target_language:'ru',
+    final:true,translation_status:'error'},false)`);
+  const row = h.element('messageList').children[0];
+  assert.equal(row.children[0].textContent, 'Una frase.');
+  assert.equal(row.children.at(-1).className, 'message-actions');
+  assert.match(row.children.at(-1).textContent, /Перевод не получился ·Повторить/);
+  row.children.at(-1).children.at(-1).onclick();
+  assert.equal(h.requests[0].path, '/api/translate');
+  await h.release('/api/translate');
+  assert.match(row.textContent, /Перевод failed/);
+});
+
+test('recognition preparation keeps the capsule disabled with technical detail in settings', async () => {
+  const h = await harness();
+  h.run(`config.engines.qwen = {ready:false,message:'Распознавание загружается…'}; liveReady = false; controls();`);
+  assert.equal(h.element('listen').disabled, true);
+  assert.equal(h.run('recognitionStatus()'), 'Подготовка распознавания…');
+  assert.equal(h.element('engineStatus').textContent, 'Распознавание загружается…');
 });

@@ -1,3 +1,5 @@
+import { openWordDialog } from './dom.js';
+
 // Model output is data, never HTML. Only unambiguous, non-overlapping source spans
 // can receive a gloss; a whole expression may have one meaning.
 export function validateGlosses(text, items) {
@@ -55,17 +57,27 @@ export function compatibleSource(current, snapshot) {
 export function renderAnnotated(container, text, glosses, targetLanguage, options = {}) {
   container.replaceChildren();
   const spans = validateGlosses(text, glosses);
-  for (const unit of sourceUnits(text)) {
-    const span = spans.find(span => span.start <= unit.start && span.end >= unit.end);
+  const units = sourceUnits(text);
+  let renderedSpan = null;
+  for (const unit of units) {
+    const span = spans.find(span => span.start < unit.end && span.end > unit.start);
+    if (span && span === renderedSpan)
+      continue;
+    renderedSpan = span;
     const group = document.createElement('span');
     group.className = 'word-hint';
     const original = document.createElement(options.onPeek ? 'button' : 'span');
     original.className = 'word-source';
-    original.textContent = unit.source;
+    const coveredUnits = span ? units.filter(item => item.start < span.end && item.end > span.start) : [unit];
+    original.textContent = text.slice(coveredUnits[0].start, coveredUnits.at(-1).end);
+    if (span && /\s/u.test(span.source))
+      group.className += ' expression';
+    if (options.selectedIndex === unit.index)
+      original.className += ' word-selected';
     if (options.onPeek) {
       original.type = 'button';
       original.setAttribute('aria-label', unit.source + ': посмотреть значение');
-      original.onclick = () => options.onPeek(unit.index);
+      original.onclick = () => options.onPeek(unit.index, original);
     }
     const meaning = document.createElement('button');
     meaning.type = 'button';
@@ -82,11 +94,17 @@ export function renderAnnotated(container, text, glosses, targetLanguage, option
     if (span) {
       meaning.title = span.meaning;
       meaning.onclick = () => {
+        if (options.onPeek) {
+          options.onPeek(unit.index, original);
+          return;
+        }
         const dialog = document.getElementById('wordDialog');
         if (dialog) {
           document.getElementById('wordOriginal').textContent = span.source;
           document.getElementById('wordMeaning').textContent = span.meaning;
-          dialog.showModal();
+          document.getElementById('wordPhrase').textContent = text;
+          document.getElementById('wordTranslation').textContent = options.translation || '';
+          openWordDialog(original);
         }
       };
     }

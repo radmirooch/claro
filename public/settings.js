@@ -13,6 +13,8 @@ import { initializePersistence } from './persistence.js';
 const translationMessage = 'Переводчик пока не готов. Оригинал остаётся доступен.';
 
 export function pairChanged() {
+  $('settingsLanguage').value = $('language').value;
+  $('settingsTargetLanguage').value = $('targetLanguage').value;
   savePreferences();
   removeDemo();
   // Past captions keep the language pair they were captured with.
@@ -80,6 +82,16 @@ export function layoutChanged() {
   renderHistory();
 }
 
+export function recognitionStatus() {
+  const engine = state.config?.engines?.[$('engine').value];
+  $('engineStatus').textContent = engine?.message || 'Движок недоступен';
+  if (state.liveReady)
+    return 'Готово';
+  return /загружается|прогревается/u.test(engine?.message || '')
+    ? 'Подготовка распознавания…'
+    : 'Распознавание недоступно';
+}
+
 export async function health() {
   try {
     const response = await fetch('/api/config');
@@ -102,7 +114,7 @@ export async function health() {
       ? `Оригинал и перевод работают отдельно. ${state.config.gloss?.ready ? 'Подстрочный перевод покрывает каждое слово и готовится отдельно.' : 'Для подстрочного перевода нужна локальная модель qwen3:4b.'}`
       : `${state.config.translation?.message || translationMessage}. Инструкция подключения — в README.`;
     if (!state.running && !state.starting && !state.demoActive)
-      status(state.liveReady ? 'Готово' : engineState?.message || 'Модель не установлена');
+      status(recognitionStatus());
     controls();
     await initializePersistence();
     renderConversation();

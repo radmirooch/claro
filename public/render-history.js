@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { $, setLanguage } from './dom.js';
+import { $, setLanguage, openWordDialog } from './dom.js';
 import { renderAnnotated, sourceUnits, validateGlosses } from './annotations.js';
 import { renderConversation } from './render.js';
 import { requestTranslation } from './translation-jobs.js';
@@ -21,8 +21,12 @@ export function refreshWordPeek() {
   }
   const unit = sourceUnits(event.text)[state.wordPeek.index],
     meaning = validateGlosses(event.text, event.glosses).find(
-      span => span.start <= unit.start && span.end >= unit.end
+      span => span.start < unit.end && span.end > unit.start
     )?.meaning;
+  $('wordPhrase').textContent = event.text;
+  setLanguage($('wordPhrase'), event.source_language);
+  $('wordTranslation').textContent = event.translation || '';
+  setLanguage($('wordTranslation'), event.target_language);
   $('wordMeaning').textContent =
     meaning ||
     (['error', 'overflow', 'unavailable'].includes(event.gloss_status) || !state.config?.gloss?.ready
@@ -30,11 +34,16 @@ export function refreshWordPeek() {
       : 'Перевод слова ещё готовится…');
 }
 
-export function peekWord(event, index) {
+export function peekWord(event, index, anchor) {
   state.wordPeek = { id: event.id, text: event.text, index };
-  $('wordOriginal').textContent = sourceUnits(event.text)[index].source;
+  const unit = sourceUnits(event.text)[index];
+  const span = validateGlosses(event.text, event.glosses).find(
+    item => item.start < unit.end && item.end > unit.start
+  );
+  $('wordOriginal').textContent = span?.source || unit.source;
+  setLanguage($('wordOriginal'), event.source_language);
   refreshWordPeek();
-  $('wordDialog').showModal();
+  openWordDialog(anchor);
   if (!event.translation)
     requestTranslation(event);
   else if (event.gloss_status !== 'ready')
@@ -74,6 +83,7 @@ export function renderHistory() {
     p.textContent = 'Здесь появятся готовые реплики разговора.';
     container.append(p);
   }
+  let previousSpeaker;
   for (const event of [...state.history].reverse()) {
     const row = document.createElement('div');
     row.className = 'phrase';
@@ -83,15 +93,17 @@ export function renderHistory() {
       minute: '2-digit'
     });
     const content = document.createElement('div');
-    if (event.speaker_id) {
+    if ($('showParticipants').value === 'show' && event.speaker_id &&
+        event.speaker_id !== previousSpeaker) {
       const name = document.createElement('small');
       name.textContent = state.participants.find(p => p.id === event.speaker_id)?.name || 'Участник';
       content.append(name);
     }
+    previousSpeaker = event.speaker_id;
     const text = document.createElement('p');
     text.textContent = event.text;
     if ($('translationLayout').value === 'words' && event.glosses?.length)
-      renderAnnotated(text, event.text, event.glosses, event.target_language);
+      renderAnnotated(text, event.text, event.glosses, event.target_language, { translation: event.translation });
     setLanguage(text, event.source_language);
     content.append(text);
     if (

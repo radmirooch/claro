@@ -63,7 +63,9 @@ export function renderConversation() {
       row.remove();
       state.messageRows.delete(id);
     }
-  for (const event of blocks) {
+  for (const [index, event] of blocks.entries()) {
+    const previousSpeaker = index > 0 ? blocks[index - 1].speaker_id : undefined;
+    const sameSpeaker = index > 0 && previousSpeaker === event.speaker_id;
     let row = state.messageRows.get(event.id);
     if (!row) {
       row = document.createElement('article');
@@ -77,6 +79,7 @@ export function renderConversation() {
     const concealed = ['peek', 'tap'].includes(mode) && !visible;
     const signature = JSON.stringify([
       event,
+      sameSpeaker,
       mode,
       words,
       $('showOriginal').value,
@@ -89,10 +92,14 @@ export function renderConversation() {
       continue;
     row.signature = signature;
     row.replaceChildren();
+    row.classList.toggle('same-speaker', sameSpeaker);
+    row.classList.toggle('phrase-layout', !words);
+    row.classList.toggle('translation-failed', ['error', 'unavailable', 'cancelled', 'overflow'].includes(event.translation_status) ||
+      ['error', 'unavailable', 'cancelled', 'overflow'].includes(event.gloss_status));
     row.classList.toggle('partial', event.final === false);
     row.classList.toggle('translation-concealed', concealed);
     row.onclick =
-      mode === 'peek'
+      ['peek', 'tap'].includes(mode)
         ? e => {
             if (e.target?.closest?.('button,select,input,a'))
               return;
@@ -100,7 +107,7 @@ export function renderConversation() {
           }
         : null;
     row.onkeydown =
-      mode === 'peek'
+      ['peek', 'tap'].includes(mode)
         ? e => {
             if (e.target === row && ['Enter', ' '].includes(e.key)) {
               e.preventDefault();
@@ -108,8 +115,8 @@ export function renderConversation() {
             }
           }
         : null;
-    row.tabIndex = mode === 'peek' ? 0 : -1;
-    if (mode === 'peek') {
+    row.tabIndex = ['peek', 'tap'].includes(mode) ? 0 : -1;
+    if (['peek', 'tap'].includes(mode)) {
       row.setAttribute(
         'aria-label',
         'Сообщение. Нажми, чтобы ' + (visible ? 'скрыть' : 'раскрыть') + ' перевод'
@@ -122,7 +129,7 @@ export function renderConversation() {
     const profile = state.participants.find(p => p.id === event.speaker_id);
     const speakers = $('showParticipants').value === 'show';
     row.setAttribute('data-speaker-color', speakers ? profile?.color || 'unknown' : 'unknown');
-    row.classList.toggle('self-message', speakers && profile?.is_self === true);
+    row.classList.toggle('self-message', event.speaker_id === 'self');
     const meta = document.createElement('div');
     meta.className = 'message-meta';
     if (speakers) {
@@ -166,18 +173,16 @@ export function renderConversation() {
     const original = document.createElement('p');
     original.className = 'message-original';
     if (interlinear)
-      renderAnnotated(
-        original,
-        event.text,
-        displayedGlosses,
-        event.target_language,
-        mode === 'peek'
-          ? {
-              concealed,
-              onPeek: index => peekWord(event.parts[0], (event.sourceOffset || 0) + index)
-            }
-          : { concealed }
-      );
+      renderAnnotated(original, event.text, displayedGlosses, event.target_language, {
+        concealed,
+        selectedIndex: state.wordPeek?.id === event.id ? state.wordPeek.index : null,
+        onPeek: (index, anchor) => {
+          if (mode === 'tap' && concealed)
+            revealMessage(event);
+          else
+            peekWord(event.parts[0], (event.sourceOffset || 0) + index, anchor);
+        }
+      });
     else
       original.textContent = event.text;
     original.hidden =
@@ -194,13 +199,15 @@ export function renderConversation() {
         setLanguage(translated, event.target_language);
       } else {
         translated.className += ' pending';
+        if (['pending', 'translating'].includes(event.translation_status))
+          translated.className += ' loading';
         translated.textContent =
           event.final === false
             ? 'Перевод после паузы…'
             : ({
                 pending: 'Ожидает перевода…',
                 translating: 'Переводим…',
-                error: 'Не удалось перевести.',
+                error: 'Перевод не получился',
                 overflow: 'Очередь заполнена. Переведи эту фразу по кнопке.',
                 cancelled: 'Перевод приостановлен.',
                 unavailable: 'Переводчик пока недоступен.',
@@ -208,12 +215,12 @@ export function renderConversation() {
                 off: 'Перевод по нажатию.'
               })[event.translation_status] || 'Перевод по нажатию.';
       }
-      if (!inlineHints && !concealed)
+      if (!inlineHints && !concealed && (event.translation || event.translation_status !== 'error'))
         row.append(translated);
       if (
         !inlineHints &&
         event.translation &&
-        ['provisional', 'streaming', 'error'].includes(event.translation_status)
+        ['provisional', 'streaming'].includes(event.translation_status)
       ) {
         const label = document.createElement('small');
         label.className = 'translation-draft';
@@ -226,7 +233,7 @@ export function renderConversation() {
       const actions = document.createElement('div');
       actions.className = 'message-actions';
       if (
-        mode !== 'peek' &&
+        (mode !== 'peek' || event.translation_status === 'error') &&
         event.final !== false &&
         (!event.translation ||
           !visible ||
@@ -237,7 +244,7 @@ export function renderConversation() {
         button.className = 'quiet';
         button.textContent =
           event.translation_status === 'error'
-            ? 'Повторить перевод'
+            ? 'Повторить'
             : event.translation
               ? 'Показать перевод'
               : 'Перевести';
@@ -253,6 +260,11 @@ export function renderConversation() {
           }
           renderConversation();
         };
+        if (event.translation_status === 'error') {
+          const failure = document.createElement('span');
+          failure.textContent = 'Перевод не получился ·';
+          actions.append(failure);
+        }
         actions.append(button);
       }
       if (

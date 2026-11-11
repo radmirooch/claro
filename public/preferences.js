@@ -14,11 +14,13 @@ export const preferenceIds = [
   'showParticipants',
   'textSize',
   'readingMode',
-  'saveConversations'
+  'saveConversations',
+  'theme',
+  'palette'
 ];
 
 export function loadPreferences() {
-  for (const id of ['language', 'targetLanguage']) {
+  for (const id of ['language', 'targetLanguage', 'settingsLanguage', 'settingsTargetLanguage']) {
     for (const lang of LANGUAGES) {
       const option = new Option(lang.label, lang.code);
       $(id).add(option);
@@ -32,6 +34,11 @@ export function loadPreferences() {
       if ([...$(id).options].some(o => o.value === prefs[id]))
         $(id).value = prefs[id];
   } catch {}
+  applyAppearance();
+}
+
+export function applyAppearance() {
+  window.claroAppearance?.apply($('theme').value, $('palette').value);
 }
 
 export function savePreferences() {

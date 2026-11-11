@@ -1,69 +1,530 @@
 <!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f5f4ef"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Claro">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta name="description" content="Локальные субтитры и перевод разговора на твоём компьютере."><title>Claro: разговор перед глазами</title><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script>
-</head>
-<body>
-<div class="shell">
-<header class="toolbar">
-<a class="brand" href="/" aria-label="Claro, главная"><span aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9v6m6-10v14m6-10v6"/></svg></span>claro</a>
-<nav class="tabs" aria-label="Разделы"><button id="conversationTab" aria-pressed="true">Разговор</button><button id="historyTab" aria-pressed="false">История</button></nav>
-<div class="toolbar-end"><span class="local-badge">На твоём Mac</span><button id="openSettings" class="icon-button" aria-label="Настройки"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></button></div>
-</header>
-<main>
-<section id="readerPanel" aria-label="Разговор">
-<div class="reader-heading"><h1>Разговор</h1><button id="display" class="quiet">Фокус</button></div>
-<div class="reader-tools">
-<div class="language-settings" aria-label="Языки"><label class="sr-only" for="language">Язык речи и оригинала</label><select id="language"></select><button id="swap" class="swap" aria-label="Поменять языки местами">⇄</button><label class="sr-only" for="targetLanguage">Переводить на</label><select id="targetLanguage"></select></div>
-<div class="segmented" aria-label="Расположение перевода"><button id="lineMode" aria-pressed="true">Перевод</button><button id="wordMode" aria-pressed="false">Под словами</button></div>
-</div>
-<section class="conversation" aria-label="Субтитры">
-<div class="card-top" role="status"><span class="live-label"><span id="mode">Живые субтитры</span></span><span id="latency">ES → RU</span></div>
-<div id="messageFeed" class="message-feed" role="log" aria-label="Сообщения разговора" aria-live="polite" aria-relevant="additions text">
-<div id="emptyState" class="empty-chat"><div class="empty-symbol" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 6h20v16H14l-8 5V6Z"/><path d="M11 12h10m-10 5h6"/></svg></div><h2>Начни разговор</h2><button id="demo" class="quiet">Посмотреть пример</button></div>
-<div id="messageList" class="message-list"></div>
-</div>
-<button id="jumpLatest" class="jump-latest" hidden>К новым сообщениям ↓</button>
-</section>
-<div id="draftPanel" class="draft-panel" hidden><span>Сейчас говорят</span><p id="draftText" aria-live="off"></p></div>
-<p id="translationNotice" class="translation-notice" role="status"></p>
-</section>
-<section id="historyPanel" class="history" hidden aria-label="История разговора">
-<div class="reader-heading"><h1>История разговора</h1></div>
-<div class="history-head"><p></p><div><button id="save" class="quiet" disabled>Текст ↓</button><button id="saveJson" class="quiet" disabled>JSON ↓</button><button id="clear" class="quiet">Новый разговор</button><button id="deleteConversation" class="quiet" hidden>Удалить</button></div></div>
-<div id="history"><p class="empty">Здесь будут завершённые фразы.</p></div>
-</section>
-</main>
-<footer class="capture-bar">
-<div class="capture-status"><meter id="meter" min="0" max="0.1" value="0" aria-label="Уровень микрофона"></meter><span id="status" role="status">Подключаем модели…</span></div>
-<button id="listen" class="primary" disabled>Начать слушать</button>
-<p class="privacy">Микрофон включается только по кнопке</p>
-</footer>
-</div>
-<dialog id="settingsDialog" aria-labelledby="settingsTitle">
-<div class="sheet-head"><h2 id="settingsTitle">Настройки</h2><button id="closeSettings" class="quiet">Готово</button></div>
-<section class="settings" aria-label="Настройки разговора">
-<label for="translationMode">Когда переводить<select id="translationMode"><option value="always" selected>Всегда показывать</option><option value="tap">Переводить по нажатию</option><option value="peek">Готовить заранее, скрывать</option><option value="off">Без перевода</option></select></label>
-<label for="saveConversations">Сохранять разговоры<select id="saveConversations"><option value="on" selected>Включено</option><option value="off">Выключено</option></select></label>
-<label for="readingMode">Появление фраз<select id="readingMode"><option value="steady" selected>Спокойно: готовые фразы</option><option value="live">Сразу: с уточнениями</option></select></label>
-<label for="interval">Обновлять субтитры<select id="interval"><option value="1">Каждую секунду</option><option value="1.5" selected>Каждые 1,5 секунды</option><option value="2">Каждые 2 секунды</option></select></label>
-<label for="threshold">Окружение<select id="threshold"><option value="0.006">Тихий разговор</option><option value="0.012" selected>Обычный разговор</option><option value="0.025">Шумное место</option></select></label>
-<label for="engine">Модель распознавания<select id="engine"><option value="qwen">Qwen3-ASR (быстро)</option><option value="whisper">Whisper (для сравнения)</option></select></label>
-<label for="translationLayout">Перевод под текстом<select id="translationLayout"><option value="line">Фразы целиком</option><option value="words" selected>Под каждым словом</option></select></label>
-<label for="sentencePause">Пауза внутри фразы<select id="sentencePause"><option value="0.6">Короткая (0,6 с)</option><option value="1.2" selected>Обычная (1,2 с)</option><option value="2">Длинная (2 с)</option></select></label>
-<label for="showOriginal">Оригинал<select id="showOriginal"><option value="show">Показывать</option><option value="hide">Только перевод</option></select></label>
-<label for="textSize">Размер текста<select id="textSize"><option value="normal">Обычный</option><option value="large">Крупный</option><option value="extra">Очень крупный</option></select></label>
-<label for="showParticipants">Участники<select id="showParticipants"><option value="hide">Скрыть подписи</option><option value="show">Имена и цвета</option></select></label>
-</section>
-<details class="participant-details"><summary>Я и участники</summary><p class="note">Выбери имя под сообщением, чтобы назначить автора. Сейчас это ручная отметка: автоматическое узнавание голосов ещё не подключено.</p><div id="participantList"></div><button id="addParticipant" class="quiet">Добавить участника</button></details>
-<p id="layoutNote" class="note" hidden>Перевод появляется под своей фразой. Подстрочный перевод появляется автоматически.</p><p id="translationInfo" class="note" hidden>Проверяем локальный перевод…</p>
-<details class="text-check"><summary>Проверить на своей фразе</summary><label for="manualText">Текст на выбранном языке</label><textarea id="manualText" maxlength="3000" rows="3" placeholder="¿Nos vemos mañana a las ocho?"></textarea><button id="translateText" class="secondary" disabled>Перевести фразу</button></details>
-<details class="connection-info"><summary>На телефоне</summary><p>Открой ссылку подключения в Safari и введи код. Нажми «Начать слушать» и разреши микрофон.</p><p>Mac должен оставаться включённым. Временная удалённая ссылка передаёт аудио и текст через Cloudflare; распознавание и перевод выполняются на Mac.</p></details>
-<div class="sheet-footer"><span class="local-badge">Обработка локально</span><span>Claro 0.11</span></div>
-</dialog>
-<dialog id="wordDialog" aria-labelledby="wordOriginal"><div class="sheet-head"><h2 id="wordOriginal"></h2><button id="closeWord" class="quiet">Готово</button></div><p id="wordMeaning" class="word-detail"></p></dialog>
-<noscript>Для локального распознавания и перевода включи JavaScript в браузере.</noscript>
-</body></html>
+<html lang="ru" data-theme="light" data-palette="graphite">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="theme-color" content="#fcfcfc">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Claro">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <meta name="description" content="Локальные субтитры и перевод разговора на твоём компьютере.">
+    <title>
+      Claro: разговор перед глазами
+    </title>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <script src="/appearance.js">
+    </script>
+    <link rel="stylesheet" href="/style.css">
+    <script type="module" src="/app.js">
+    </script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="toolbar">
+        <a class="brand" href="/" aria-label="Claro, главная">
+          <span aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M6 9v6m6-10v14m6-10v6"/>
+            </svg>
+          </span>
+          claro
+        </a>
+        <nav class="tabs" aria-label="Разделы">
+          <button id="conversationTab" aria-pressed="true">
+            <span class="nav-icon conversation-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 4h16v12H9l-5 4Z"/></svg>
+            </span>
+            <span>
+              Разговор
+            </span>
+            <i class="recording-dot" aria-hidden="true">
+            </i>
+          </button>
+          <button id="historyTab" aria-pressed="false">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>
+            </span>
+            <span>
+              История
+            </span>
+          </button>
+        </nav>
+        <div class="toolbar-end">
+          <button id="openSettings" class="icon-button" aria-label="Настройки">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h16M4 17h16"/>
+              <circle cx="9" cy="7" r="3"/>
+              <circle cx="15" cy="17" r="3"/>
+            </svg>
+            <span class="settings-label">
+              Настройки
+            </span>
+          </button>
+        </div>
+      </header>
+      <main>
+        <section id="readerPanel" aria-label="Разговор">
+          <div class="reader-heading">
+            <h1 class="sr-only">
+              Разговор
+            </h1>
+            <button id="display" class="quiet">
+              Фокус
+            </button>
+          </div>
+          <div class="reader-tools">
+            <div class="language-settings" aria-label="Языки">
+              <label class="sr-only" for="language">
+                Язык речи и оригинала
+              </label>
+              <select id="language">
+              </select>
+              <button id="swap" class="swap" aria-label="Поменять языки местами">
+                ⇄
+              </button>
+              <label class="sr-only" for="targetLanguage">
+                Переводить на
+              </label>
+              <select id="targetLanguage">
+              </select>
+            </div>
+            <div class="segmented" role="group" aria-label="Расположение перевода">
+              <button id="lineMode" aria-pressed="true">
+                Фраза
+              </button>
+              <button id="wordMode" aria-pressed="false">
+                Под словами
+              </button>
+            </div>
+          </div>
+          <section class="conversation" aria-label="Субтитры">
+            <div class="card-top" role="status">
+              <span class="live-label">
+                <span id="mode">
+                  Живые субтитры
+                </span>
+              </span>
+              <span id="latency">
+                ES → RU
+              </span>
+            </div>
+            <div id="messageFeed" class="message-feed" role="log" aria-label="Сообщения разговора" aria-live="polite" aria-relevant="additions text">
+              <div id="emptyState" class="empty-chat">
+                <div class="empty-symbol" aria-hidden="true">
+                  <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M6 6h20v16H14l-8 5V6Z"/>
+                    <path d="M11 12h10m-10 5h6"/>
+                  </svg>
+                </div>
+                <h2>
+                  Начните разговор
+                </h2>
+                <button id="demo" class="quiet">
+                  Показать пример
+                </button>
+              </div>
+              <div id="messageList" class="message-list">
+              </div>
+            </div>
+            <button id="jumpLatest" class="jump-latest" hidden>
+              К новым ↓
+            </button>
+          </section>
+          <div id="draftPanel" class="draft-panel" hidden>
+            <span>
+              Сейчас говорят
+            </span>
+            <p id="draftText" aria-live="off">
+            </p>
+          </div>
+          <p id="translationNotice" class="translation-notice" role="status">
+          </p>
+        </section>
+        <section id="historyPanel" class="history" hidden aria-label="История разговора">
+          <div class="reader-heading">
+            <h1>
+              История разговора
+            </h1>
+          </div>
+          <div class="history-head">
+            <p>
+            </p>
+            <div>
+              <button id="save" class="quiet" disabled>
+                Текст ↓
+              </button>
+              <button id="saveJson" class="quiet" disabled>
+                JSON ↓
+              </button>
+              <button id="clear" class="quiet">
+                Новый разговор
+              </button>
+              <button id="deleteConversation" class="quiet" hidden>
+                Удалить
+              </button>
+            </div>
+          </div>
+          <div id="history">
+            <p class="empty">
+              Здесь будут завершённые фразы.
+            </p>
+          </div>
+        </section>
+      </main>
+      <footer class="capture-bar">
+        <div class="capture-status">
+          <meter id="meter" min="0" max="0.1" value="0" aria-label="Уровень микрофона">
+          </meter>
+          <span id="status" role="status">
+            Подготовка распознавания…
+          </span>
+        </div>
+        <button id="listen" class="primary" disabled>
+          <span class="record-icon" aria-hidden="true">
+          </span>
+          <span id="listenLabel">
+            Слушать
+          </span>
+          <span id="soundLevel" class="sound-level" data-level="0" aria-hidden="true">
+            <i>
+            </i>
+            <i>
+            </i>
+            <i>
+            </i>
+            <i>
+            </i>
+          </span>
+          <time id="recordingTime">
+            00:00
+          </time>
+        </button>
+        <p class="privacy">
+          Микрофон включается только по кнопке
+        </p>
+      </footer>
+    </div>
+    <dialog id="settingsDialog" aria-labelledby="settingsTitle">
+      <div class="sheet-handle" aria-hidden="true">
+      </div>
+      <div class="sheet-head">
+        <h2 id="settingsTitle">
+          Настройки
+        </h2>
+        <button id="closeSettings" class="quiet">
+          Готово
+        </button>
+      </div>
+      <div class="settings">
+        <section class="settings-group">
+          <h3>
+            Оформление
+          </h3>
+          <label for="theme">
+            Тема
+            <select id="theme">
+              <option value="auto">
+                Как в системе
+              </option>
+              <option value="light">
+                Светлая
+              </option>
+              <option value="dark">
+                Тёмная
+              </option>
+            </select>
+          </label>
+          <label for="palette">
+            Цвет оформления
+            <select id="palette">
+              <option value="graphite">
+                Графит
+              </option>
+              <option value="sand">
+                Песок
+              </option>
+              <option value="sage">
+                Шалфей
+              </option>
+              <option value="ocean">
+                Океан
+              </option>
+              <option value="lilac">
+                Сирень
+              </option>
+            </select>
+          </label>
+          <label for="textSize">
+            Размер текста
+            <select id="textSize">
+              <option value="normal">
+                Обычный
+              </option>
+              <option value="large">
+                Крупный
+              </option>
+              <option value="extra">
+                Очень крупный
+              </option>
+            </select>
+          </label>
+          <div class="appearance-preview" aria-label="Образец оформления">
+            <div class="preview-bubble">
+              <span>
+                ¿Nos vemos mañana?
+              </span>
+              <small>
+                Увидимся завтра?
+              </small>
+            </div>
+            <div class="preview-bubble preview-self">
+              <span>
+                Sí, a las ocho.
+              </span>
+              <small>
+                Да, в восемь.
+              </small>
+            </div>
+          </div>
+        </section>
+        <section class="settings-group">
+          <h3>
+            Языки
+          </h3>
+          <label for="settingsLanguage">
+            Язык речи
+            <select id="settingsLanguage"></select>
+          </label>
+          <label for="settingsTargetLanguage">
+            Язык перевода
+            <select id="settingsTargetLanguage"></select>
+          </label>
+        </section>
+        <section class="settings-group">
+          <h3>
+            Перевод
+          </h3>
+          <label for="translationMode">
+            Когда переводить
+            <select id="translationMode">
+              <option value="always" selected>
+                Всегда показывать
+              </option>
+              <option value="tap">
+                Переводить по нажатию
+              </option>
+              <option value="peek">
+                Готовить заранее, скрывать
+              </option>
+              <option value="off">
+                Без перевода
+              </option>
+            </select>
+          </label>
+          <label for="translationLayout">
+            Вид перевода
+            <select id="translationLayout">
+              <option value="line">
+                Фразы целиком
+              </option>
+              <option value="words" selected>
+                Под каждым словом
+              </option>
+            </select>
+          </label>
+          <details class="text-check">
+            <summary>
+              Проверить на своей фразе
+            </summary>
+            <label for="manualText">
+              Текст на выбранном языке
+            </label>
+            <textarea id="manualText" maxlength="3000" rows="3" placeholder="¿Nos vemos mañana a las ocho?"></textarea>
+            <button id="translateText" class="secondary" disabled>
+              Перевести фразу
+            </button>
+          </details>
+        </section>
+        <section class="settings-group">
+          <h3>
+            Субтитры
+          </h3>
+          <label for="readingMode">
+            Появление фраз
+            <select id="readingMode">
+              <option value="steady" selected>
+                Спокойно: готовые фразы
+              </option>
+              <option value="live">
+                Сразу: с уточнениями
+              </option>
+            </select>
+          </label>
+          <label for="showOriginal">
+            Оригинал
+            <select id="showOriginal">
+              <option value="show">
+                Показывать
+              </option>
+              <option value="hide">
+                Только перевод
+              </option>
+            </select>
+          </label>
+        </section>
+        <section class="settings-group">
+          <h3>
+            Звук
+          </h3>
+          <label for="threshold">
+            Окружение
+            <select id="threshold">
+              <option value="0.006">
+                Тихий разговор
+              </option>
+              <option value="0.012" selected>
+                Обычный разговор
+              </option>
+              <option value="0.025">
+                Шумное место
+              </option>
+            </select>
+          </label>
+        </section>
+        <section class="settings-group">
+          <h3>
+            Участники
+          </h3>
+          <label for="showParticipants">
+            Участники
+            <select id="showParticipants">
+              <option value="hide">
+                Скрыть подписи
+              </option>
+              <option value="show">
+                Имена и цвета
+              </option>
+            </select>
+          </label>
+          <p class="note">
+            Выбери имя над сообщением, чтобы назначить автора. Сейчас это ручная отметка: автоматическое узнавание голосов ещё не подключено.
+          </p>
+          <div id="participantList">
+          </div>
+          <button id="addParticipant" class="quiet">
+            Добавить участника
+          </button>
+        </section>
+        <section class="settings-group">
+          <h3>
+            Данные
+          </h3>
+          <label for="saveConversations">
+            Сохранять разговоры
+            <select id="saveConversations">
+              <option value="on" selected>
+                Включено
+              </option>
+              <option value="off">
+                Выключено
+              </option>
+            </select>
+          </label>
+        </section>
+        <section class="settings-group">
+          <h3>
+            Телефон
+          </h3>
+          <div class="connection-info">
+            <p>
+              Открой ссылку подключения в Safari и введи код. Нажми «Начать слушать» и разреши микрофон.
+            </p>
+            <p>
+              Mac должен оставаться включённым. Временная удалённая ссылка передаёт аудио и текст через Cloudflare; распознавание и перевод выполняются на Mac.
+            </p>
+          </div>
+        </section>
+        <details class="advanced">
+          <summary>
+            Дополнительно
+          </summary>
+          <label for="engine">
+            Движок распознавания
+            <select id="engine">
+              <option value="qwen">
+                Qwen3-ASR (быстро)
+              </option>
+              <option value="whisper">
+                Whisper (для сравнения)
+              </option>
+            </select>
+          </label>
+          <label for="interval">
+            Обновлять субтитры
+            <select id="interval">
+              <option value="1">
+                Каждую секунду
+              </option>
+              <option value="1.5" selected>
+                Каждые 1,5 секунды
+              </option>
+              <option value="2">
+                Каждые 2 секунды
+              </option>
+            </select>
+          </label>
+          <label for="sentencePause">
+            Пауза внутри фразы
+            <select id="sentencePause">
+              <option value="0.6">
+                Короткая (0,6 с)
+              </option>
+              <option value="1.2" selected>
+                Обычная (1,2 с)
+              </option>
+              <option value="2">
+                Длинная (2 с)
+              </option>
+            </select>
+          </label>
+          <p id="engineStatus" class="note">
+          </p>
+          <p id="layoutNote" class="note" hidden>
+          </p>
+          <p id="translationInfo" class="note" hidden>
+          </p>
+        </details>
+      </div>
+      <div class="sheet-footer">
+        <span class="local-badge">
+          Обработка локально
+        </span>
+        <span>
+          Claro 0.11
+        </span>
+      </div>
+    </dialog>
+    <dialog id="wordDialog" aria-labelledby="wordOriginal">
+      <div class="sheet-handle" aria-hidden="true">
+      </div>
+      <div class="sheet-head">
+        <h2 id="wordOriginal">
+        </h2>
+        <button id="closeWord" class="quiet">
+          Готово
+        </button>
+      </div>
+      <p id="wordMeaning" class="word-detail" dir="auto">
+      </p>
+      <p id="wordPhrase" class="word-phrase" dir="auto">
+      </p>
+      <p id="wordTranslation" class="word-translation" dir="auto">
+      </p>
+    </dialog>
+    <noscript>
+      Для локального распознавания и перевода включи JavaScript в браузере.
+    </noscript>
+  </body>
+</html>

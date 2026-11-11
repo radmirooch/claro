@@ -102,16 +102,18 @@ export async function drain() {
 
 export function controls() {
   document.body.classList.toggle('is-listening', state.running);
-  $('listen').textContent = state.starting
+  $('listenLabel').textContent = state.starting
     ? 'Включаем микрофон…'
     : state.running
-      ? 'Остановить'
-      : 'Начать слушать';
+      ? 'Стоп'
+      : 'Слушать';
   $('listen').classList.toggle('active', state.running);
   $('listen').disabled = state.starting || (!state.running && !state.liveReady);
   for (const id of [
     'language',
     'targetLanguage',
+    'settingsLanguage',
+    'settingsTargetLanguage',
     'engine',
     'interval',
     'threshold',

@@ -1,15 +1,45 @@
 import { state } from './state.js';
-import { $, status } from './dom.js';
-import { loadPreferences, savePreferences } from './preferences.js';
+import { $, status, initializeSheets } from './dom.js';
+import { loadPreferences, savePreferences, applyAppearance } from './preferences.js';
 import { renderConversation } from './render.js';
 import { controls, start, stop } from './capture.js';
 import { queueExistingGlosses, cancelGlosses } from './gloss-jobs.js';
 import { showDemo } from './demo.js';
 import { renderParticipantSettings, addParticipant } from './participant-settings.js';
-import { pairChanged, layoutChanged, setPanel, health, download, translationModeChanged, translateText } from './settings.js';
+import { pairChanged, layoutChanged, setPanel, health, recognitionStatus, download, translationModeChanged, translateText } from './settings.js';
 import { initializePersistence, newConversation, deleteConversation } from './persistence.js';
 
 loadPreferences();
+initializeSheets();
+
+for (const id of ['theme', 'palette'])
+  $(id).onchange = () => {
+    savePreferences();
+    applyAppearance();
+  };
+for (const [settingsId, sourceId] of [
+  ['settingsLanguage', 'language'],
+  ['settingsTargetLanguage', 'targetLanguage']
+])
+  $(settingsId).onchange = () => {
+    $(sourceId).value = $(settingsId).value;
+    pairChanged();
+  };
+
+let recordingStarted = null;
+export function updateRecordingIndicator(now = Date.now()) {
+  if (state.running && recordingStarted === null)
+    recordingStarted = now;
+  if (!state.running)
+    recordingStarted = null;
+  const elapsed = recordingStarted === null ? 0 : Math.floor((now - recordingStarted) / 1000);
+  const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const seconds = String(elapsed % 60).padStart(2, '0');
+  $('recordingTime').textContent = `${minutes}:${seconds}`;
+  const level = state.running ? Math.min(4, Math.ceil(Number($('meter').value) / 0.025)) : 0;
+  $('soundLevel').setAttribute('data-level', String(level));
+}
+setInterval(updateRecordingIndicator, 100);
 
 $('messageFeed').onscroll = () => {
   const feed = $('messageFeed');
@@ -45,7 +75,10 @@ $('jumpLatest').onclick = () => {
   state.followConversation = true;
   renderConversation();
 };
-window.addEventListener('resize', () => renderConversation());
+window.addEventListener('resize', () => {
+  $('wordDialog').close();
+  renderConversation();
+});
 $('language').onchange = $('targetLanguage').onchange = pairChanged;
 $('swap').onclick = () => {
   const old = $('language').value;
@@ -59,7 +92,7 @@ $('engine').onchange = () => {
   savePreferences();
   state.liveReady = Boolean(state.config?.engines?.[$('engine').value]?.ready);
   controls();
-  status(state.config?.engines?.[$('engine').value]?.message || 'Движок не установлен');
+  status(recognitionStatus());
 };
 $('listen').onclick = start;
 $('translationMode').onchange = translationModeChanged;

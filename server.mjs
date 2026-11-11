@@ -17,6 +17,7 @@ import { sessionRoute } from './lib/session-api.mjs';
 const root = new URL('./public/', import.meta.url);
 const assets = {
   '/': ['index.html', 'text/html'],
+  '/appearance.js': ['appearance.js', 'text/javascript'],
   '/app.js': ['app.js', 'text/javascript'],
   '/languages.js': ['languages.js', 'text/javascript'],
   '/audio.js': ['audio.js', 'text/javascript'],
