@@ -17,9 +17,15 @@ def send(value):
     protocol.flush()
 
 try:
-    session = Session(model=os.environ.get("QWEN_MODEL", "moona3k/mlx-qwen3-asr-0.6b-4bit"))
+    session = Session(
+        model=os.environ.get("QWEN_MODEL", "moona3k/mlx-qwen3-asr-0.6b-4bit")
+    )
     # Compile Metal kernels before enabling the microphone.
-    session.transcribe(np.zeros(16000, dtype=np.float32), language="Spanish", max_new_tokens=16)
+    session.transcribe(
+        np.zeros(16000, dtype=np.float32),
+        language="Spanish",
+        max_new_tokens=16
+    )
     send({"ready": True})
 except Exception as error:
     send({"ready": False, "error": str(error)})
@@ -35,11 +41,18 @@ for line in sys.stdin:
         with wave.open(io.BytesIO(base64.b64decode(request["wav"])), "rb") as wav:
             if wav.getframerate() != 16000 or wav.getnchannels() != 1 or wav.getsampwidth() != 2:
                 raise ValueError("Expected PCM16 mono 16 kHz")
-            audio = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2").astype(np.float32) / 32768
+            audio = np.frombuffer(
+                wav.readframes(wav.getnframes()), dtype="<i2"
+            ).astype(np.float32) / 32768
         live = request.get("live")
         if live:
             if stream_id != live["id"] or state is None:
-                state = session.init_streaming(language=request["language"], chunk_size_sec=live["interval"], max_context_sec=15, finalization_mode="latency")
+                state = session.init_streaming(
+                    language=request["language"],
+                    chunk_size_sec=live["interval"],
+                    max_context_sec=15,
+                    finalization_mode="latency"
+                )
                 stream_id, fed = live["id"], 0
             if len(audio) < fed:
                 raise ValueError("Audio revision moved backwards")
