@@ -1,6 +1,6 @@
 {
   "name": "claro-local-captions",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Local speech captions and configurable translation for extensible language-learning clients",
   "license": "MIT",
   "private": true,
