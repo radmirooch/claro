@@ -1,3 +1,4 @@
+import { recognitionMissing } from './readiness.js';
 import { state } from './state.js';
 import { $, setLanguage } from './dom.js';
 import { renderAnnotated, validateGlosses } from './annotations.js';
@@ -51,9 +52,13 @@ export function renderConversation() {
     draft = steady ? all.filter(event => event.final === false).at(-1) : null;
   $('draftPanel').hidden = !draft || ($('showOriginal').value === 'hide' && mode !== 'off');
   $('draftText').textContent = draft ? draftTail(draft.text) : '';
+  const modelsMissing = recognitionMissing(state.config);
   $('emptyState').hidden = all.length > 0;
+  $('emptyTitle').textContent = modelsMissing ? 'Модели не установлены' : 'Начните разговор';
+  $('setupHelp').hidden = !modelsMissing;
   renderMessages(all.filter(event => !steady || event.final !== false), list, state.messageRows);
-  $('translationNotice').hidden = true;
+  $('translationNotice').textContent = 'Перевод недоступен';
+  $('translationNotice').hidden = !state.config || Boolean(state.config.translator) || state.demoActive || mode === 'off';
   if (state.followConversation)
     feed.scrollTop = feed.scrollHeight;
   else

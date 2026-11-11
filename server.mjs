@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { readFile, access, mkdir, chmod, open } from 'node:fs/promises';
+import { readFile, access, mkdir, chmod, open, writeFile, unlink } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -7,6 +7,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { WhisperAdapter, validateWav } from './lib/whisper.mjs';
 import { QwenAdapter } from './lib/qwen.mjs';
+import { warmModels } from './lib/warmup.mjs';
 import { OllamaTranslator, localURL } from './lib/translation.mjs';
 import { LANGUAGES, languageByCode } from './public/languages.js';
 
@@ -30,6 +31,7 @@ const assets = {
   '/translation-jobs.js': ['translation-jobs.js', 'text/javascript'],
   '/gloss-jobs.js': ['gloss-jobs.js', 'text/javascript'],
   '/capture.js': ['capture.js', 'text/javascript'],
+  '/readiness.js': ['readiness.js', 'text/javascript'],
   '/settings.js': ['settings.js', 'text/javascript'],
   '/persistence.js': ['persistence.js', 'text/javascript'],
   '/library.js': ['library.js', 'text/javascript'],
@@ -422,7 +424,7 @@ async function main() {
   const engineURL = localURL(process.env.WHISPER_URL || `http://127.0.0.1:${enginePort}`);
   const model =
     process.env.WHISPER_MODEL || `${homedir()}/.cache/whisper-models/ggml-large-v3-turbo.bin`;
-  let state = { ready: false, message: 'Whisper загружается…' },
+  let state = { ready: false, installed: true, message: 'Whisper загружается…' },
     child,
     translationChild;
   const translator = process.env.OLLAMA_MODEL
@@ -458,8 +460,17 @@ async function main() {
     });
   } catch {}
   const engines = { whisper: { asr: new WhisperAdapter(engineURL), health: () => state } };
-  if (qwen)
-    engines.qwen = { asr: qwen, health: () => qwen.state };
+  if (qwen) {
+    const loadingStarted = Date.now();
+    engines.qwen = {
+      asr: qwen,
+      health: () => {
+        if (!qwen.state.ready && /загружается|прогревается/u.test(qwen.state.message) && Date.now() - loadingStarted > 120000)
+          return { ready: false, message: 'Распознавание не загрузилось за 2 минуты. Проверьте установку и перезапустите Claro.' };
+        return qwen.state;
+      }
+    };
+  }
   const defaultEngine = process.env.ASR_ENGINE || (qwen ? 'qwen' : 'whisper');
   if (!engines[defaultEngine]) {
     qwen?.close();
@@ -484,6 +495,38 @@ async function main() {
     });
     app.listen(port, '127.0.0.1', resolve);
   });
+  const warming = new AbortController();
+  const pidFile = new URL('./.runtime/claro.pid', import.meta.url);
+  let ownsPidFile = false;
+  let stopping = false;
+  const stop = async () => {
+    if (stopping)
+      return;
+    stopping = true;
+    warming.abort();
+    child?.kill('SIGTERM');
+    qwen?.close();
+    translationChild?.kill('SIGTERM');
+    app.close();
+    app.closeAllConnections();
+    if (ownsPidFile) {
+      try {
+        if ((await readFile(pidFile, 'utf8')).trim() === String(process.pid))
+          await unlink(pidFile);
+      } catch {}
+    }
+    setTimeout(() => process.exit(), 500).unref();
+  };
+  process.on('SIGINT', stop);
+  process.on('SIGTERM', stop);
+  process.on('SIGHUP', stop);
+  try {
+    await mkdir(new URL('./.runtime/', import.meta.url), { recursive: true });
+    await writeFile(pidFile, `${process.pid}\n`, { mode: 0o600 });
+    ownsPidFile = true;
+  } catch {
+    console.error('Не удалось записать файл процесса. Для остановки закройте окно запуска.');
+  }
   console.log(`Claro: http://127.0.0.1:${port}`);
   if (translator && process.env.OLLAMA_BIN) {
     // Only start an explicitly configured engine; never alter an existing daemon.
@@ -492,6 +535,8 @@ async function main() {
       reachable = (await fetch(`${translator.url}/api/tags`, { signal: AbortSignal.timeout(1000) }))
         .ok;
     } catch {}
+    if (stopping)
+      return;
     if (!reachable) {
       translationChild = spawn(process.env.OLLAMA_BIN, ['serve'], {
         stdio: 'ignore',
@@ -507,9 +552,14 @@ async function main() {
       );
     }
   }
+  if (stopping)
+    return;
+  void warmModels([translator, glosser], { signal: warming.signal });
   try {
     if (!process.env.WHISPER_URL) {
       await access(model);
+      if (stopping)
+        return;
       const args = [
         '-m',
         model,
@@ -533,10 +583,13 @@ async function main() {
       child = spawn(process.env.WHISPER_BIN || 'whisper-server', args, {
         stdio: ['ignore', 'ignore', 'ignore']
       });
-      child.on('error', () => {
+      child.on('error', error => {
         state = {
           ready: false,
-          message: 'Не удалось запустить whisper-server. Проверь WHISPER_BIN.'
+          installed: error.code !== 'ENOENT',
+          message: error.code === 'ENOENT'
+            ? 'Распознавание не установлено — запустите npm run setup.'
+            : 'Не удалось запустить whisper-server. Проверь WHISPER_BIN.'
         };
       });
       child.on('exit', code => {
@@ -568,18 +621,8 @@ async function main() {
     }, 1500);
     poll.unref();
   } catch {
-    state = { ready: false, message: 'Модель не найдена. Укажи WHISPER_MODEL.' };
+    state = { ready: false, installed: false, message: 'Распознавание не установлено — запустите npm run setup.' };
   }
-  const stop = () => {
-    child?.kill('SIGTERM');
-    qwen?.close();
-    translationChild?.kill('SIGTERM');
-    app.close();
-    app.closeAllConnections();
-    setTimeout(() => process.exit(), 500).unref();
-  };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
 }
 if (process.argv[1] === fileURLToPath(import.meta.url))
   main().catch(e => {

@@ -6,13 +6,14 @@ import { controls, start, stop } from './capture.js';
 import { queueExistingGlosses, cancelGlosses } from './gloss-jobs.js';
 import { showDemo } from './demo.js';
 import { renderParticipantSettings, addParticipant } from './participant-settings.js';
-import { pairChanged, layoutChanged, setPanel, health, recognitionStatus, download, translationModeChanged, translateText } from './settings.js';
+import { initializeAppInstall, pairChanged, layoutChanged, setPanel, health, recognitionStatus, download, translationModeChanged, translateText } from './settings.js';
 import { initializePersistence, newConversation, deleteConversation } from './persistence.js';
 import { initializeLibrary, configureLibrary, openLibrary, renderLibrary } from './library.js';
 
 loadPreferences();
 initializeSheets();
 initializeLibrary();
+initializeAppInstall();
 
 for (const id of ['theme', 'palette'])
   $(id).onchange = () => {
@@ -100,6 +101,14 @@ $('engine').onchange = () => {
 $('listen').onclick = start;
 $('translationMode').onchange = translationModeChanged;
 $('demo').onclick = showDemo;
+$('copySetup').onclick = async () => {
+  try {
+    await navigator.clipboard.writeText('npm run setup');
+    $('copySetup').textContent = 'Команда скопирована';
+  } catch {
+    $('copySetup').textContent = 'Скопируйте команду npm run setup';
+  }
+};
 $('translateText').onclick = translateText;
 $('clear').onclick = async () => {
   const cleared = await newConversation();

@@ -118,9 +118,14 @@
                     <path d="M11 12h10m-10 5h6"/>
                   </svg>
                 </div>
-                <h2>
+                <h2 id="emptyTitle">
                   Начните разговор
                 </h2>
+                <div id="setupHelp" hidden>
+                  <p>В Терминале из папки Claro выполните <code>npm run setup</code></p>
+                  <button id="copySetup" class="quiet">Скопировать команду</button>
+                  <p><a href="https://github.com/radmirooch/claro/blob/main/docs/setup.md" target="_blank" rel="noopener noreferrer">Инструкция установки</a></p>
+                </div>
                 <button id="demo" class="quiet">
                   Показать пример
                 </button>
@@ -209,7 +214,7 @@
           <meter id="meter" min="0" max="0.1" value="0" aria-label="Уровень микрофона">
           </meter>
           <span id="status" role="status">
-            Подготовка распознавания…
+            Проверяем локальный сервер…
           </span>
         </div>
         <button id="listen" class="primary" disabled>
@@ -452,6 +457,8 @@
           <h3>
             Данные
           </h3>
+          <button id="installApp" class="quiet">Установить как приложение</button>
+          <p id="appInstallHint" class="note" role="status"></p>
           <label for="saveConversations">
             Сохранять разговоры
             <select id="saveConversations">

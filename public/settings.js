@@ -1,3 +1,4 @@
+import { recognitionMessage } from './readiness.js';
 import { state } from './state.js';
 import { $, status } from './dom.js';
 import { savePreferences } from './preferences.js';
@@ -10,8 +11,6 @@ import { requestTranslation, cancelTranslations } from './translation-jobs.js';
 import { queueExistingGlosses, cancelGlosses } from './gloss-jobs.js';
 import { initializePersistence } from './persistence.js';
 import { configureLibrary, openLibrary, renderLibrary } from './library.js';
-
-const translationMessage = 'Переводчик пока не готов. Оригинал остаётся доступен.';
 
 export function pairChanged() {
   $('settingsLanguage').value = $('language').value;
@@ -92,11 +91,7 @@ export function layoutChanged() {
 export function recognitionStatus() {
   const engine = state.config?.engines?.[$('engine').value];
   $('engineStatus').textContent = engine?.message || 'Движок недоступен';
-  if (state.liveReady)
-    return 'Готово';
-  return /загружается|прогревается/u.test(engine?.message || '')
-    ? 'Подготовка распознавания…'
-    : 'Распознавание недоступно';
+  return recognitionMessage(state.config, $('engine').value);
 }
 
 export async function health() {
@@ -119,7 +114,7 @@ export async function health() {
     state.liveReady = Boolean(engineState?.ready);
     $('translationInfo').textContent = state.config.translator
       ? `Оригинал и перевод работают отдельно. ${state.config.gloss?.ready ? 'Подстрочный перевод покрывает каждое слово и готовится отдельно.' : 'Для подстрочного перевода нужна локальная модель qwen3:4b.'}`
-      : `${state.config.translation?.message || translationMessage}. Инструкция подключения — в README.`;
+      : 'Перевод недоступен. Запустите npm run setup или проверьте настройки Ollama по инструкции docs/setup.md.';
     if (!state.running && !state.starting && !state.demoActive)
       status(recognitionStatus());
     controls();
@@ -198,4 +193,33 @@ export function clearConversation() {
   $('manualText').value = '';
   pairChanged();
   renderHistory();
+}
+
+export function initializeAppInstall() {
+  let installPrompt = null;
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    installPrompt = event;
+  });
+  window.addEventListener('appinstalled', () => {
+    installPrompt = null;
+    $('appInstallHint').textContent = 'Claro установлено как приложение';
+  });
+  $('installApp').onclick = async () => {
+    if (!installPrompt) {
+      $('appInstallHint').textContent = 'В Chrome: меню ⋮ → Установить Claro';
+      return;
+    }
+    const prompt = installPrompt;
+    installPrompt = null;
+    try {
+      await prompt.prompt();
+      const choice = await prompt.userChoice;
+      $('appInstallHint').textContent = choice.outcome === 'accepted'
+        ? 'Установка Claro запрошена'
+        : 'В Chrome: меню ⋮ → Установить Claro';
+    } catch {
+      $('appInstallHint').textContent = 'В Chrome: меню ⋮ → Установить Claro';
+    }
+  };
 }

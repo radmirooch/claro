@@ -5,8 +5,9 @@ import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
 import {sourceUnits} from '../public/annotations.js';
 
-async function harness({live=false,streaming=false,glossStreaming=false,sessions=false,activeSession=null,preferences={},sessionResponder,confirmDelete=true} = {}) {
+async function harness({live=false,streaming=false,glossStreaming=false,sessions=false,activeSession=null,preferences={},sessionResponder,confirmDelete=true,configOverride={},clipboard} = {}) {
   const elements = new Map();
+  const windowListeners = new Map();
   function createClassList() {
     return {
       toggle(name, force) {
@@ -40,12 +41,12 @@ async function harness({live=false,streaming=false,glossStreaming=false,sessions
   const context = vm.createContext({console,structuredClone,TextDecoder,URL,URLSearchParams,Blob,AbortSignal,AbortController,performance,crypto:webcrypto,
     Option:class {constructor(label,value){this.label=label;this.value=value;}},
     document:{getElementById:element,createElement:()=>element('node'+Math.random()),createTextNode:text=>({textContent:text}),body:{classList:{toggle(){}},setAttribute(){}}},
-    localStorage:{getItem:key=>key==='claro.preferences.v1'?JSON.stringify(preferences):null,setItem(){}},confirm:()=>confirmDelete,window:{addEventListener(){}},setInterval(){},setTimeout,
-    navigator:{mediaDevices:{getUserMedia:async()=>({getTracks:()=>[{stop(){}}],getAudioTracks:()=>[{}]})}},
+    localStorage:{getItem:key=>key==='claro.preferences.v1'?JSON.stringify(preferences):null,setItem(){}},confirm:()=>confirmDelete,window:{addEventListener(type, listener){windowListeners.set(type, listener);}},setInterval(){},setTimeout,
+    navigator:{clipboard,mediaDevices:{getUserMedia:async()=>({getTracks:()=>[{stop(){}}],getAudioTracks:()=>[{}]})}},
     AudioContext:class {constructor(){this.sampleRate=16000;this.audioWorklet={addModule:async()=>{}};} async resume(){} close(){return Promise.resolve();} createMediaStreamSource(){return {connect(node){return node;},disconnect(){}};} createGain(){return {gain:{},connect(){},disconnect(){}};}},
     AudioWorkletNode:class {constructor(){this.port={};}connect(node){return node;}disconnect(){}},
     fetch:async(path,options)=>{
-      if(path==='/api/config')return {ok:true,json:async()=>({token:'test',translator:true,default_engine:'qwen',engines:{qwen:{ready:true}},translation:{},gloss:{ready:true},features:{sessions,live_translation:live,translation_streaming:streaming,gloss_streaming:glossStreaming}})};
+      if(path==='/api/config')return {ok:true,json:async()=>({token:'test',translator:true,default_engine:'qwen',engines:{qwen:{ready:true}},translation:{},gloss:{ready:true},features:{sessions,live_translation:live,translation_streaming:streaming,gloss_streaming:glossStreaming},...configOverride})};
       if (path.startsWith('/api/sessions')) {
         const request = {path, method:options.method, headers:options.headers, input:options.body ? JSON.parse(options.body) : undefined};
         sessionRequests.push(request);
@@ -124,7 +125,7 @@ async function harness({live=false,streaming=false,glossStreaming=false,sessions
   const settle=()=>new Promise(resolve=>setImmediate(resolve)); await settle();
   async function feed(frames,volume=.05){for(let i=0;i<frames;i++)run(`capture.port.onmessage({data:new Float32Array(1600).fill(${volume})})`);await settle();}
   async function release(path){const index=path ? pending.findIndex(item=>item.path===path) : 0;assert.ok(index>=0 && pending.length,'model request pending');pending.splice(index,1)[0]();await settle();}
-  return {element,run,feed,release,settle,requests,pending,sessionRequests};
+  return {element,run,feed,release,settle,requests,pending,sessionRequests,windowListeners};
 }
 
 test('conversation keeps successive captions and attaches delayed FIFO translations after microphone stop',async()=>{
@@ -671,7 +672,7 @@ test('recognition preparation keeps the capsule disabled with technical detail i
   const h = await harness();
   h.run(`config.engines.qwen = {ready:false,message:'Распознавание загружается…'}; liveReady = false; controls();`);
   assert.equal(h.element('listen').disabled, true);
-  assert.equal(h.run('recognitionStatus()'), 'Подготовка распознавания…');
+  assert.equal(h.run('recognitionStatus()'), 'Загружаем распознавание…');
   assert.equal(h.element('engineStatus').textContent, 'Распознавание загружается…');
 });
 
@@ -1016,4 +1017,60 @@ test('library groups consecutive saved speakers without repeating participant la
   assert.equal(rows[0].children[0].className, 'message-meta');
   assert.equal(rows[1].classList.contains('same-speaker'), true);
   assert.equal(rows[1].children.some(node => node.className === 'message-meta'), false);
+});
+
+
+test('missing recognition shows an actionable status and a copyable setup command', async () => {
+  let copied;
+  const h = await harness({
+    configOverride: { ready:false, translator:false, default_engine:'whisper', engines:{whisper:{ready:false,installed:false}} },
+    clipboard: { async writeText(text) { copied = text; } }
+  });
+  assert.match(h.element('status').textContent, /Распознавание не установлено.*npm run setup/u);
+  assert.doesNotMatch(h.element('status').textContent, /Подключаем модели/u);
+  assert.equal(h.element('emptyTitle').textContent, 'Модели не установлены');
+  assert.equal(h.element('setupHelp').hidden, false);
+  assert.equal(h.element('listen').disabled, true);
+  await h.element('copySetup').onclick();
+  assert.equal(copied, 'npm run setup');
+  assert.equal(h.element('copySetup').textContent, 'Команда скопирована');
+});
+
+test('loading and failed recognition have distinct statuses with a recovery action', async () => {
+  const h = await harness({ configOverride:{ready:false,engines:{qwen:{ready:false,message:'Qwen загружается и прогревается…'}}} });
+  assert.equal(h.element('status').textContent, 'Загружаем распознавание…');
+  assert.equal(h.element('setupHelp').hidden, true);
+  h.run("config.engines.qwen = {ready:false,message:'Qwen остановлен.'}");
+  await h.run('controls()');
+  assert.match(h.run('recognitionStatus()'), /перезапустите Claro/u);
+});
+
+test('unavailable translation shows one notice while original captions keep working', async () => {
+  const h = await harness({configOverride:{translator:false}});
+  assert.equal(h.element('translationNotice').textContent, 'Перевод недоступен');
+  assert.equal(h.element('translationNotice').hidden, false);
+  await h.run('start()');
+  await h.feed(15);
+  assert.ok(h.run('current.text'));
+  assert.equal(h.run('liveReady'), true);
+  h.run('stop()');
+});
+
+test('application installation uses the browser prompt and reports the supported fallback', async () => {
+  const h = await harness();
+  await h.element('installApp').onclick();
+  assert.equal(h.element('appInstallHint').textContent, 'В Chrome: меню ⋮ → Установить Claro');
+  let prevented = false;
+  let prompted = false;
+  h.windowListeners.get('beforeinstallprompt')({
+    preventDefault() { prevented = true; },
+    async prompt() { prompted = true; },
+    userChoice: Promise.resolve({outcome:'accepted'})
+  });
+  assert.equal(prevented, true);
+  await h.element('installApp').onclick();
+  assert.equal(prompted, true);
+  assert.equal(h.element('appInstallHint').textContent, 'Установка Claro запрошена');
+  h.windowListeners.get('appinstalled')();
+  assert.equal(h.element('appInstallHint').textContent, 'Claro установлено как приложение');
 });
