@@ -3,14 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
-import {encodeWav} from '../public/audio.js';
-import {LiveBuffer, CaptionQueue, TranslationQueue, readingBlocks} from '../public/live.js';
-import {LANGUAGES, languageByCode} from '../public/languages.js';
-import {defaultParticipants,readParticipants,assignSpeaker,SPEAKER_COLORS} from '../public/participants.js';
-import {createModuleBus} from '../public/modules.js';
-import {splitFinalCaption,draftTail} from '../public/reading.js';
 import {sourceUnits} from '../public/annotations.js';
-import {readJSONLines} from '../public/stream.js';
 
 async function harness({live=false,streaming=false,glossStreaming=false} = {}) {
   const elements = new Map();
@@ -21,7 +14,7 @@ async function harness({live=false,streaming=false,glossStreaming=false} = {}) {
   for (const [id,value] of Object.entries({engine:'qwen',interval:'1.5',threshold:'.012',translationMode:'always',translationLayout:'line',showOriginal:'show',showParticipants:'hide',textSize:'normal',readingMode:'live'})) {element(id).value=value; element(id).options=[{value}];}
   element('historyPanel').hidden=true;
   const requests=[], pending=[];
-  const context = vm.createContext({console,structuredClone,splitFinalCaption,draftTail,defaultParticipants,readParticipants,assignSpeaker,SPEAKER_COLORS,createModuleBus,encodeWav,LiveBuffer,CaptionQueue,TranslationQueue,readingBlocks,LANGUAGES,languageByCode,readJSONLines,URLSearchParams,AbortSignal,AbortController,performance,crypto:webcrypto,
+  const context = vm.createContext({console,structuredClone,TextDecoder,URL,URLSearchParams,Blob,AbortSignal,AbortController,performance,crypto:webcrypto,
     Option:class {constructor(label,value){this.label=label;this.value=value;}},
     document:{getElementById:element,createElement:()=>element('node'+Math.random()),createTextNode:text=>({textContent:text}),body:{classList:{toggle(){}},setAttribute(){}}},
     localStorage:{getItem:()=>null,setItem(){}},window:{addEventListener(){}},setInterval(){},setTimeout,
@@ -52,9 +45,46 @@ async function harness({live=false,streaming=false,glossStreaming=false} = {}) {
       return new Promise(resolve=>pending.push(Object.assign(()=>resolve({ok:true,json:async()=>path==='/api/gloss'?{glosses:sourceUnits(input.text).map(unit=>({...unit,meaning:'текст'}))}:{translation:'Перевод '+input.caption_id,processing_ms:5000}}),{path})));
     }
   });
-  const run = source => vm.runInContext(source,context);
-  run((await readFile(new URL('../public/annotations.js',import.meta.url),'utf8')).replaceAll('export function','function'));
-  run((await readFile(new URL('../public/app.js',import.meta.url),'utf8')).replace(/^import .*;\n/gm,''));
+  const publicRoot = new URL('../public/', import.meta.url);
+  const modules = new Map();
+  function loadModule(url) {
+    if (!modules.has(url.href)) {
+      const loading = readFile(url, 'utf8').then(source => new vm.SourceTextModule(source, {
+        context,
+        identifier: url.href
+      }));
+      modules.set(url.href, loading);
+    }
+    return modules.get(url.href);
+  }
+  const entry = await loadModule(new URL('app.js', publicRoot));
+  await entry.link((specifier, referencingModule) => {
+    assert.ok(specifier.startsWith('./') || specifier.startsWith('../'), 'relative module import');
+    const url = new URL(specifier, referencingModule.identifier);
+    assert.ok(url.href.startsWith(publicRoot.href), 'module belongs to public/');
+    return loadModule(url);
+  });
+  await entry.evaluate();
+  const {state} = (await loadModule(new URL('state.js', publicRoot))).namespace;
+  const exports = Object.create(null);
+  for (const loading of modules.values()) {
+    Object.assign(exports, (await loading).namespace);
+  }
+  context.__scope = new Proxy(state, {
+    has(target, key) {
+      return Object.hasOwn(target, key) || Object.hasOwn(exports, key);
+    },
+    get(target, key) {
+      if (key === Symbol.unscopables)
+        return undefined;
+      return Object.hasOwn(target, key) ? target[key] : exports[key];
+    },
+    set(target, key, value) {
+      target[key] = value;
+      return true;
+    }
+  });
+  const run = source => vm.runInContext(`with (__scope) { ${source}\n}`, context);
   const settle=()=>new Promise(resolve=>setImmediate(resolve)); await settle();
   async function feed(frames,volume=.05){for(let i=0;i<frames;i++)run(`capture.port.onmessage({data:new Float32Array(1600).fill(${volume})})`);await settle();}
   async function release(path){const index=path ? pending.findIndex(item=>item.path===path) : 0;assert.ok(index>=0 && pending.length,'model request pending');pending.splice(index,1)[0]();await settle();}

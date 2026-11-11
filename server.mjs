@@ -18,6 +18,29 @@ const assets = {
   '/languages.js': ['languages.js', 'text/javascript'],
   '/audio.js': ['audio.js', 'text/javascript'],
   '/capture-worklet.js': ['capture-worklet.js', 'text/javascript'],
+  '/state.js': ['state.js', 'text/javascript'],
+  '/dom.js': ['dom.js', 'text/javascript'],
+  '/preferences.js': ['preferences.js', 'text/javascript'],
+  '/render.js': ['render.js', 'text/javascript'],
+  '/render-history.js': ['render-history.js', 'text/javascript'],
+  '/translation-jobs.js': ['translation-jobs.js', 'text/javascript'],
+  '/gloss-jobs.js': ['gloss-jobs.js', 'text/javascript'],
+  '/capture.js': ['capture.js', 'text/javascript'],
+  '/settings.js': ['settings.js', 'text/javascript'],
+  '/participant-settings.js': ['participant-settings.js', 'text/javascript'],
+  '/demo.js': ['demo.js', 'text/javascript'],
+  '/live.js': ['live.js', 'text/javascript'],
+  '/stream.js': ['stream.js', 'text/javascript'],
+  '/annotations.js': ['annotations.js', 'text/javascript'],
+  '/participants.js': ['participants.js', 'text/javascript'],
+  '/reading.js': ['reading.js', 'text/javascript'],
+  '/modules.js': ['modules.js', 'text/javascript'],
+  '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'],
+  '/icon.svg': ['icon.svg', 'image/svg+xml'],
+  '/mobile': ['index.html', 'text/html'],
+  '/apple-touch-icon.png': ['apple-touch-icon.png', 'image/png'],
+  '/icon-192.png': ['icon-192.png', 'image/png'],
+  '/icon-512.png': ['icon-512.png', 'image/png'],
   '/style.css': ['style.css', 'text/css']
 };
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -41,17 +64,6 @@ export function createApp({
   health = () => ({ ready: true }),
   port = 4317
 }) {
-  assets['/live.js'] = ['live.js', 'text/javascript'];
-  assets['/stream.js'] = ['stream.js', 'text/javascript'];
-  assets['/annotations.js'] = ['annotations.js', 'text/javascript'];
-  assets['/participants.js'] = ['participants.js', 'text/javascript'];
-  assets['/reading.js'] = ['reading.js', 'text/javascript'];
-  assets['/modules.js'] = ['modules.js', 'text/javascript'];
-  assets['/manifest.webmanifest'] = ['manifest.webmanifest', 'application/manifest+json'];
-  assets['/icon.svg'] = ['icon.svg', 'image/svg+xml'];
-  assets['/mobile'] = ['index.html', 'text/html'];
-  for (const name of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png'])
-    assets[`/${name}`] = [name, 'image/png'];
   const token = randomUUID(),
     subscribers = new Set();
   let busy = false,
