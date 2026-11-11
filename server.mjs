@@ -32,6 +32,7 @@ const assets = {
   '/capture.js': ['capture.js', 'text/javascript'],
   '/settings.js': ['settings.js', 'text/javascript'],
   '/persistence.js': ['persistence.js', 'text/javascript'],
+  '/library.js': ['library.js', 'text/javascript'],
   '/participant-settings.js': ['participant-settings.js', 'text/javascript'],
   '/demo.js': ['demo.js', 'text/javascript'],
   '/live.js': ['live.js', 'text/javascript'],

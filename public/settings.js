@@ -9,6 +9,7 @@ import { controls, stop } from './capture.js';
 import { requestTranslation, cancelTranslations } from './translation-jobs.js';
 import { queueExistingGlosses, cancelGlosses } from './gloss-jobs.js';
 import { initializePersistence } from './persistence.js';
+import { configureLibrary, openLibrary, renderLibrary } from './library.js';
 
 const translationMessage = 'Переводчик пока не готов. Оригинал остаётся доступен.';
 
@@ -27,22 +28,22 @@ export function pairChanged() {
   controls();
 }
 
-export function download(json) {
+export function download(json, captions = state.history, participants = state.participants) {
   const value = json
     ? JSON.stringify(
         {
           schema_version: 2,
           exported_at: new Date().toISOString(),
-          participants: state.participants,
-          captions: state.history
+          participants,
+          captions
         },
         null,
         2
       )
-    : state.history
+    : captions
         .map(
           e =>
-            `${state.participants.find(p=>p.id===e.speaker_id)?.name || 'Участник не определён'}\n[${e.source_language} → ${e.target_language}] ${e.text}${e.translation ? '\n' + e.translation : ''}`
+            `${participants.find(p=>p.id===e.speaker_id)?.name || 'Участник не определён'}\n[${e.source_language} → ${e.target_language}] ${e.text}${e.translation ? '\n' + e.translation : ''}`
         )
         .join('\n\n');
   const url = URL.createObjectURL(
@@ -56,13 +57,18 @@ export function download(json) {
 }
 
 export function setPanel(panel) {
+  state.wordPeek = null;
+  $('wordDialog').close();
   $('readerPanel').hidden = panel !== 'reader';
   $('historyPanel').hidden = panel !== 'history';
   $('conversationTab').setAttribute('aria-pressed', String(panel === 'reader'));
   $('historyTab').setAttribute('aria-pressed', String(panel === 'history'));
-  if (panel === 'history')
+  configureLibrary();
+  if (panel === 'history') {
+    if (state.config?.features?.sessions)
+      return openLibrary();
     renderHistory();
-  else
+  } else
     renderConversation();
 }
 
@@ -80,6 +86,7 @@ export function layoutChanged() {
   savePreferences();
   showTranslation();
   renderHistory();
+  renderLibrary();
 }
 
 export function recognitionStatus() {
@@ -117,6 +124,8 @@ export async function health() {
       status(recognitionStatus());
     controls();
     await initializePersistence();
+    if (configureLibrary() && !$('historyPanel').hidden && state.config?.features?.sessions)
+      openLibrary();
     renderConversation();
   } catch {
     state.liveReady = false;

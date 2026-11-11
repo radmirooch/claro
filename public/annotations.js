@@ -2,7 +2,7 @@ import { openWordDialog } from './dom.js';
 
 // Model output is data, never HTML. Only unambiguous, non-overlapping source spans
 // can receive a gloss; a whole expression may have one meaning.
-export function validateGlosses(text, items) {
+export function validateGlosses(text, items, maximumLength) {
   if (!Array.isArray(items))
     return [];
   const result = [],
@@ -15,7 +15,7 @@ export function validateGlosses(text, items) {
       (!item.source || item.source === indexed.source) &&
       typeof item.meaning === 'string' &&
       item.meaning.trim() &&
-      item.meaning.length <= 120
+      item.meaning.length <= (maximumLength ?? 120)
     ) {
       if (!result.some(span => indexed.start < span.end && indexed.end > span.start))
         result.push({ ...indexed, meaning: item.meaning.trim() });
@@ -25,7 +25,7 @@ export function validateGlosses(text, items) {
       continue;
     const source = item.source.trim(),
       meaning = item.meaning.trim();
-    if (!source || source.length > 80 || !meaning || meaning.length > 80)
+    if (!source || source.length > (maximumLength ?? 80) || !meaning || meaning.length > (maximumLength ?? 80))
       continue;
     const start = text.indexOf(source),
       end = start + source.length;
@@ -56,7 +56,7 @@ export function compatibleSource(current, snapshot) {
 
 export function renderAnnotated(container, text, glosses, targetLanguage, options = {}) {
   container.replaceChildren();
-  const spans = validateGlosses(text, glosses);
+  const spans = validateGlosses(text, glosses, options.maxGlossLength);
   const units = sourceUnits(text);
   let renderedSpan = null;
   for (const unit of units) {

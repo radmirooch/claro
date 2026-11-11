@@ -13,37 +13,40 @@ export function showTranslation() {
 export function refreshWordPeek() {
   if (!state.wordPeek)
     return;
-  const event = state.messages.get(state.wordPeek.id);
+  const event = state.wordPeek.record || state.messages.get(state.wordPeek.id);
   if (!event || event.text !== state.wordPeek.text) {
     state.wordPeek = null;
     $('wordDialog').close();
     return;
   }
   const unit = sourceUnits(event.text)[state.wordPeek.index],
-    meaning = validateGlosses(event.text, event.glosses).find(
+    meaning = validateGlosses(event.text, event.glosses, state.wordPeek.record ? 300 : undefined).find(
       span => span.start < unit.end && span.end > unit.start
     )?.meaning;
   $('wordPhrase').textContent = event.text;
   setLanguage($('wordPhrase'), event.source_language);
   $('wordTranslation').textContent = event.translation || '';
   setLanguage($('wordTranslation'), event.target_language);
-  $('wordMeaning').textContent =
-    meaning ||
-    (['error', 'overflow', 'unavailable'].includes(event.gloss_status) || !state.config?.gloss?.ready
+  let missingMeaning = 'Значение слова не сохранено.';
+  if (!state.wordPeek.record)
+    missingMeaning = ['error', 'overflow', 'unavailable'].includes(event.gloss_status) || !state.config?.gloss?.ready
       ? 'Перевод слова недоступен. Можно повторить перевод сообщения.'
-      : 'Перевод слова ещё готовится…');
+      : 'Перевод слова ещё готовится…';
+  $('wordMeaning').textContent = meaning || missingMeaning;
 }
 
-export function peekWord(event, index, anchor) {
-  state.wordPeek = { id: event.id, text: event.text, index };
+export function peekWord(event, index, anchor, readOnly = false) {
+  state.wordPeek = { id: event.id, text: event.text, index, ...(readOnly ? { record: event } : {}) };
   const unit = sourceUnits(event.text)[index];
-  const span = validateGlosses(event.text, event.glosses).find(
+  const span = validateGlosses(event.text, event.glosses, readOnly ? 300 : undefined).find(
     item => item.start < unit.end && item.end > unit.start
   );
   $('wordOriginal').textContent = span?.source || unit.source;
   setLanguage($('wordOriginal'), event.source_language);
   refreshWordPeek();
   openWordDialog(anchor);
+  if (readOnly)
+    return;
   if (!event.translation)
     requestTranslation(event);
   else if (event.gloss_status !== 'ready')

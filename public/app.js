@@ -8,9 +8,11 @@ import { showDemo } from './demo.js';
 import { renderParticipantSettings, addParticipant } from './participant-settings.js';
 import { pairChanged, layoutChanged, setPanel, health, recognitionStatus, download, translationModeChanged, translateText } from './settings.js';
 import { initializePersistence, newConversation, deleteConversation } from './persistence.js';
+import { initializeLibrary, configureLibrary, openLibrary, renderLibrary } from './library.js';
 
 loadPreferences();
 initializeSheets();
+initializeLibrary();
 
 for (const id of ['theme', 'palette'])
   $(id).onchange = () => {
@@ -78,6 +80,7 @@ $('jumpLatest').onclick = () => {
 window.addEventListener('resize', () => {
   $('wordDialog').close();
   renderConversation();
+  renderLibrary();
 });
 $('language').onchange = $('targetLanguage').onchange = pairChanged;
 $('swap').onclick = () => {
@@ -98,11 +101,18 @@ $('listen').onclick = start;
 $('translationMode').onchange = translationModeChanged;
 $('demo').onclick = showDemo;
 $('translateText').onclick = translateText;
-$('clear').onclick = newConversation;
+$('clear').onclick = async () => {
+  const cleared = await newConversation();
+  if (state.config?.features?.sessions && cleared !== false)
+    setPanel('reader');
+};
 $('deleteConversation').onclick = deleteConversation;
 $('saveConversations').onchange = () => {
   savePreferences();
   initializePersistence();
+  configureLibrary();
+  if (!$('historyPanel').hidden)
+    openLibrary();
 };
 $('save').onclick = () => download(false);
 $('saveJson').onclick = () => download(true);
@@ -135,6 +145,7 @@ for (const id of ['showOriginal', 'showParticipants', 'textSize', 'readingMode']
         queueExistingGlosses();
     }
     renderConversation();
+    renderLibrary();
   };
 $('closeWord').onclick = () => {
   state.wordPeek = null;

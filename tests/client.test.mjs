@@ -674,3 +674,346 @@ test('recognition preparation keeps the capsule disabled with technical detail i
   assert.equal(h.run('recognitionStatus()'), 'Подготовка распознавания…');
   assert.equal(h.element('engineStatus').textContent, 'Распознавание загружается…');
 });
+
+function libraryFixture() {
+  const session = {
+    id:'22222222-2222-4222-8222-222222222222', title:'Пример разговора',
+    source_language:'es', target_language:'ru', started_at:new Date().toISOString(),
+    ended_at:new Date().toISOString(), turn_count:1, preview:'Una mesa.'
+  };
+  const turn = {
+    id:'saved-turn', session_id:session.id, seq:1, text:'Una mesa.', translation:'Стол.',
+    source_language:'es', target_language:'ru', created_at:session.started_at, speaker_id:'self',
+    glosses:sourceUnits('Una mesa.').map(unit => ({...unit,meaning:'слово'})),
+    extra:{translation_status:'ready',gloss_status:'ready',revision:3}
+  };
+  const fixture = {sessions:[session], turns:[turn], session};
+  fixture.respond = request => {
+    const path = new URL(request.path, 'http://localhost').pathname;
+    let result;
+    if (path === '/api/sessions' && request.method === 'GET')
+      result = {sessions:fixture.sessions};
+    else if (path === `/api/sessions/${session.id}`) {
+      if (request.method === 'DELETE') {
+        fixture.sessions = [];
+        result = {ok:true};
+      } else if (request.method === 'PATCH') {
+        Object.assign(session, request.input);
+        result = session;
+      } else
+        result = {session,turns:fixture.turns};
+    } else
+      return;
+    return {ok:true,json:async()=>structuredClone(result)};
+  };
+  return fixture;
+}
+
+test('library loads saved conversations with day groups, languages, counts and client search', async () => {
+  const fixture = libraryFixture();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  fixture.sessions.push({...fixture.session,id:'yesterday',title:null,preview:'Otra frase de ejemplo.',started_at:yesterday.toISOString()});
+  fixture.sessions.push({...fixture.session,id:'older',title:'Старый пример',started_at:'2020-01-02T10:30:00.000Z'});
+  const h = await harness({sessions:true,sessionResponder:fixture.respond});
+  await h.element('historyTab').onclick();
+  assert.equal(h.element('legacyHistory').hidden, true);
+  assert.equal(h.element('library').hidden, false);
+  assert.match(h.element('libraryList').textContent, /Сегодня.*Пример разговора.*Испанский → Русский · 1 реплика/);
+  assert.match(h.element('libraryList').textContent, /Вчера.*Otra frase de ejemplo\./);
+  assert.match(h.element('libraryList').textContent, /2 января 2020/);
+  const request = h.sessionRequests.find(request => request.path.startsWith('/api/sessions?'));
+  assert.equal(request.method, 'GET');
+  assert.equal(request.headers['X-Session-Token'], 'test');
+  const requests = h.sessionRequests.length;
+  h.element('librarySearch').value = 'MESA';
+  h.element('librarySearch').oninput();
+  assert.match(h.element('libraryList').textContent, /Пример разговора/);
+  assert.doesNotMatch(h.element('libraryList').textContent, /Otra frase/);
+  h.element('librarySearch').value = 'ничего похожего';
+  h.element('librarySearch').oninput();
+  assert.match(h.element('libraryList').textContent, /Ничего не нашлось/);
+  h.element('libraryList').children.at(-1).onclick();
+  assert.equal(h.element('librarySearch').value, '');
+  assert.equal(h.sessionRequests.length, requests);
+});
+
+test('library opens saved bubbles and word meanings without mutating or writing the current conversation', async () => {
+  const fixture = libraryFixture();
+  const h = await harness({sessions:true,sessionResponder:fixture.respond});
+  h.run("show({id:'local-turn',demo:true,text:'Otra frase.',source_language:'es',target_language:'ru',final:true},false)");
+  await h.element('historyTab').onclick();
+  const row = h.element('libraryList').children[0].children[1];
+  await row.onclick();
+  assert.equal(h.element('libraryListView').hidden, true);
+  assert.equal(h.element('libraryDetail').hidden, false);
+  assert.equal(h.element('captureBar').hidden, true);
+  assert.match(h.element('libraryMessages').textContent, /Una.*mesa\..*Стол\./);
+  assert.equal(h.element('libraryMessages').children[0].attributes['data-caption-id'], 'saved-turn');
+  const savedRow = h.element('libraryMessages').children[0];
+  savedRow.children[0].children[0].children[0].onclick();
+  assert.equal(h.element('wordMeaning').textContent, 'слово');
+  assert.equal(h.element('wordTranslation').textContent, 'Стол.');
+  h.run('refreshWordPeek()');
+  assert.equal(h.element('wordPhrase').textContent, 'Una mesa.');
+  assert.equal(h.run('messages.size'), 1);
+  assert.equal(h.run('messages.has("local-turn")'), true);
+  assert.equal(h.run('history.length'), 0);
+  assert.equal(h.requests.length, 0);
+  assert.ok(h.sessionRequests.every(request => request.method === 'GET'));
+  h.element('showParticipants').value = 'show';
+  h.element('showParticipants').onchange();
+  assert.equal(savedRow.children[0].className, 'message-meta');
+  assert.equal(savedRow.children[0].children.length, 0);
+  h.element('translationLayout').value = 'words';
+  h.element('translationLayout').onchange();
+  assert.match(h.element('libraryMessages').textContent, /слово/);
+  await h.element('libraryBack').onclick();
+  assert.equal(h.element('libraryDetail').hidden, true);
+  assert.equal(h.run('wordPeek'), null);
+});
+
+test('library rename sends a token-protected PATCH and enforces the title limit', async () => {
+  const fixture = libraryFixture();
+  const h = await harness({sessions:true,sessionResponder:fixture.respond});
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  h.element('libraryRename').onclick();
+  assert.equal(h.element('libraryName').value, 'Пример разговора');
+  assert.equal(h.element('libraryRenameForm').hidden, false);
+  h.element('libraryName').value = 'x'.repeat(121);
+  await h.element('libraryRenameForm').onsubmit({preventDefault(){}});
+  assert.equal(h.sessionRequests.some(request => request.method === 'PATCH'), false);
+  h.element('libraryName').value = 'Новое название';
+  await h.element('libraryRenameForm').onsubmit({preventDefault(){}});
+  const request = h.sessionRequests.at(-1);
+  assert.equal(request.path, `/api/sessions/${fixture.session.id}`);
+  assert.equal(request.method, 'PATCH');
+  assert.deepEqual(request.input, {title:'Новое название'});
+  assert.equal(request.headers['X-Session-Token'], 'test');
+  assert.equal(h.element('libraryTitle').textContent, 'Новое название');
+  assert.equal(h.element('libraryRenameForm').hidden, true);
+  await h.element('libraryBack').onclick();
+  assert.match(h.element('libraryList').textContent, /Новое название/);
+});
+
+test('library deletion sends DELETE after confirmation and returns to the refreshed list', async () => {
+  const fixture = libraryFixture();
+  const h = await harness({sessions:true,sessionResponder:fixture.respond});
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  await h.element('libraryDelete').onclick();
+  const request = h.sessionRequests.find(request => request.method === 'DELETE');
+  assert.equal(request.path, `/api/sessions/${fixture.session.id}`);
+  assert.equal(request.headers['X-Session-Token'], 'test');
+  assert.equal(h.element('libraryDetail').hidden, true);
+  assert.match(h.element('libraryList').textContent, /Пока нет разговоров/);
+});
+
+test('declining library deletion keeps the saved conversation open', async () => {
+  const fixture = libraryFixture();
+  const h = await harness({sessions:true,sessionResponder:fixture.respond,confirmDelete:false});
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  await h.element('libraryDelete').onclick();
+  assert.equal(h.sessionRequests.some(request => request.method === 'DELETE'), false);
+  assert.equal(h.element('libraryDetail').hidden, false);
+});
+
+test('library continues only the current active conversation and preserves capture through navigation', async () => {
+  const fixture = libraryFixture();
+  fixture.session.ended_at = null;
+  const h = await harness({sessions:true,sessionResponder:fixture.respond,
+    activeSession:{session:fixture.session,turns:fixture.turns}});
+  await h.run('start()');
+  await h.element('historyTab').onclick();
+  assert.match(h.element('libraryList').textContent, /Сейчас/);
+  assert.equal(h.run('running'), true);
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  assert.equal(h.element('libraryContinue').hidden, false);
+  h.element('libraryContinue').onclick();
+  assert.equal(h.element('readerPanel').hidden, false);
+  assert.equal(h.element('historyPanel').hidden, true);
+  assert.equal(h.element('captureBar').hidden, false);
+  assert.equal(h.run('sessionId'), fixture.session.id);
+  h.run('stop()');
+  fixture.session.ended_at = new Date().toISOString();
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  assert.equal(h.element('libraryContinue').hidden, true);
+});
+
+test('deleting the active conversation from the library clears its persistence identity', async () => {
+  const fixture = libraryFixture();
+  fixture.session.ended_at = null;
+  const h = await harness({sessions:true,sessionResponder:fixture.respond,
+    activeSession:{session:fixture.session,turns:fixture.turns}});
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  await h.element('libraryDelete').onclick();
+  assert.equal(h.run('sessionId'), null);
+  assert.equal(h.run('messages.size'), 0);
+  assert.equal(h.run('history.length'), 0);
+  assert.equal(h.element('libraryDetail').hidden, true);
+  assert.equal(h.sessionRequests.filter(request => request.method === 'DELETE').length, 1);
+});
+
+test('library offers retry for loading failures, empty navigation and disabled-storage settings', async () => {
+  const fixture = libraryFixture();
+  let fail = true;
+  const h = await harness({sessions:true,sessionResponder:request => {
+    if (request.path.startsWith('/api/sessions?') && fail)
+      return {ok:false};
+    return fixture.respond(request);
+  }});
+  await h.element('historyTab').onclick();
+  assert.match(h.element('libraryList').textContent, /Не удалось открыть библиотеку/);
+  fail = false;
+  fixture.sessions = [];
+  await h.element('libraryList').children.at(-1).onclick();
+  assert.match(h.element('libraryList').textContent, /Пока нет разговоров/);
+  h.element('libraryList').children.at(-1).onclick();
+  assert.equal(h.element('readerPanel').hidden, false);
+  h.element('saveConversations').value = 'off';
+  h.element('saveConversations').onchange();
+  const count = h.sessionRequests.length;
+  await h.element('historyTab').onclick();
+  assert.match(h.element('libraryList').textContent, /Сохранение разговоров выключено/);
+  let settingsOpened = false;
+  h.element('settingsDialog').showModal = () => { settingsOpened = true; };
+  h.element('libraryList').children.at(-1).onclick();
+  assert.equal(settingsOpened, true);
+  assert.equal(h.sessionRequests.length, count);
+});
+
+test('without session support the library tab retains the browser history and its export controls', async () => {
+  const h = await harness();
+  h.run("show({id:'legacy-turn',text:'Una mesa.',source_language:'es',target_language:'ru',final:true,created_at:new Date().toISOString()})");
+  await h.element('historyTab').onclick();
+  assert.equal(h.element('legacyHistory').hidden, false);
+  assert.equal(h.element('library').hidden, true);
+  assert.match(h.element('history').textContent, /Una mesa\./);
+  assert.equal(h.element('save').disabled, false);
+  assert.equal(h.sessionRequests.length, 0);
+});
+
+test('library exports saved turns as TXT and schema v2 JSON with stable IDs and revisions', async () => {
+  const fixture = libraryFixture();
+  const h = await harness({sessions:true,sessionResponder:fixture.respond});
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  h.run(`
+    URL = class extends URL {
+      static createObjectURL(blob) { window.exportedBlob = blob; return 'blob:export'; }
+      static revokeObjectURL() {}
+    };
+    const originalCreateElement = document.createElement;
+    document.createElement = type => {
+      const element = originalCreateElement(type);
+      element.click = () => {};
+      return element;
+    };
+  `);
+  h.element('libraryExport').onclick();
+  assert.equal(h.element('libraryExports').hidden, false);
+  h.element('libraryExportJson').onclick();
+  const exported = JSON.parse(await h.run('window.exportedBlob.text()'));
+  assert.equal(exported.schema_version, 2);
+  assert.equal(exported.captions.length, 1);
+  assert.equal(exported.captions[0].id, 'saved-turn');
+  assert.equal(exported.captions[0].revision, 3);
+  assert.equal(exported.captions[0].glosses[0].meaning, 'слово');
+  assert.ok(exported.participants.some(participant => participant.id === 'self'));
+  h.element('libraryExportText').onclick();
+  assert.match(await h.run('window.exportedBlob.text()'), /\[es → ru\] Una mesa\.\nСтол\./);
+  assert.equal(h.run('history.length'), 0);
+});
+
+test('library mutation errors preserve the open saved conversation and support another attempt', async () => {
+  const fixture = libraryFixture();
+  let fail = true;
+  const h = await harness({sessions:true,sessionResponder:request => {
+    if (fail && ['PATCH','DELETE'].includes(request.method))
+      return {ok:false};
+    return fixture.respond(request);
+  }});
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  h.element('libraryRename').onclick();
+  h.element('libraryName').value = 'Новое название';
+  await h.element('libraryRenameForm').onsubmit({preventDefault(){}});
+  assert.match(h.element('libraryActionError').textContent, /Не удалось переименовать/);
+  assert.equal(h.element('libraryRenameSave').disabled, false);
+  await h.element('libraryDelete').onclick();
+  assert.match(h.element('libraryActionError').textContent, /Не удалось удалить/);
+  assert.equal(h.element('libraryDelete').disabled, false);
+  assert.equal(h.element('libraryDetail').hidden, false);
+  fail = false;
+  await h.element('libraryDelete').onclick();
+  assert.equal(h.element('libraryDetail').hidden, true);
+});
+
+test('disabling storage while a saved conversation loads ignores the late response', async () => {
+  const fixture = libraryFixture();
+  let finish;
+  const h = await harness({sessions:true,sessionResponder:request => {
+    if (request.path === `/api/sessions/${fixture.session.id}`)
+      return new Promise(resolve => { finish = () => resolve(fixture.respond(request)); });
+    return fixture.respond(request);
+  }});
+  await h.element('historyTab').onclick();
+  const opening = h.run(`openSavedConversation('${fixture.session.id}')`);
+  h.element('saveConversations').value = 'off';
+  h.element('saveConversations').onchange();
+  finish();
+  await opening;
+  assert.equal(h.element('libraryDetail').hidden, true);
+  assert.match(h.element('libraryList').textContent, /Сохранение разговоров выключено/);
+});
+
+test('library displays complete saved meanings up to the storage limit without starting word work', async () => {
+  const fixture = libraryFixture();
+  const meaning = 'Длинное сохранённое значение '.repeat(20).slice(0, 299) + 'я';
+  fixture.turns[0].glosses[0].meaning = meaning;
+  const h = await harness({sessions:true,sessionResponder:fixture.respond});
+  h.element('translationLayout').value = 'words';
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  const source = h.element('libraryMessages').children[0].children[0];
+  assert.equal(source.children[0].children[1].textContent, meaning);
+  source.children[0].children[0].onclick();
+  assert.equal(h.element('wordMeaning').textContent, meaning);
+  fixture.turns[0].glosses = null;
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  assert.match(h.element('libraryMessages').textContent, /Стол\./);
+  h.element('libraryMessages').children[0].children[0].children[0].children[0].onclick();
+  assert.equal(h.element('wordMeaning').textContent, 'Значение слова не сохранено.');
+  assert.equal(h.requests.length, 0);
+});
+
+test('starting a new conversation from the library ends the active session and opens the reader', async () => {
+  const fixture = libraryFixture();
+  fixture.session.ended_at = null;
+  const h = await harness({sessions:true,sessionResponder:fixture.respond,
+    activeSession:{session:fixture.session,turns:fixture.turns}});
+  await h.element('historyTab').onclick();
+  await h.element('clear').onclick();
+  const request = h.sessionRequests.find(request => request.method === 'PATCH');
+  assert.deepEqual(request.input, {ended:true});
+  assert.equal(h.element('readerPanel').hidden, false);
+  assert.equal(h.run('history.length'), 0);
+  assert.equal(h.run('sessionId'), null);
+});
+
+test('library groups consecutive saved speakers without repeating participant labels', async () => {
+  const fixture = libraryFixture();
+  fixture.turns.push({...fixture.turns[0],id:'saved-second',seq:2});
+  const h = await harness({sessions:true,sessionResponder:fixture.respond});
+  h.element('showParticipants').value = 'show';
+  await h.element('historyTab').onclick();
+  await h.run(`openSavedConversation('${fixture.session.id}')`);
+  const rows = h.element('libraryMessages').children;
+  assert.equal(rows[0].children[0].className, 'message-meta');
+  assert.equal(rows[1].classList.contains('same-speaker'), true);
+  assert.equal(rows[1].children.some(node => node.className === 'message-meta'), false);
+});

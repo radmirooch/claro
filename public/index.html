@@ -47,7 +47,7 @@
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>
             </span>
             <span>
-              История
+              Библиотека
             </span>
           </button>
         </nav>
@@ -142,38 +142,69 @@
           <p id="translationNotice" class="translation-notice" role="status">
           </p>
         </section>
-        <section id="historyPanel" class="history" hidden aria-label="История разговора">
+        <section id="historyPanel" class="history" hidden aria-label="Библиотека">
           <div class="reader-heading">
             <h1>
-              История разговора
+              Библиотека
             </h1>
+            <button id="clear" class="quiet">Новый разговор</button>
           </div>
-          <div class="history-head">
-            <p>
-            </p>
-            <div>
-              <button id="save" class="quiet" disabled>
-                Текст ↓
-              </button>
-              <button id="saveJson" class="quiet" disabled>
-                JSON ↓
-              </button>
-              <button id="clear" class="quiet">
-                Новый разговор
-              </button>
-              <button id="deleteConversation" class="quiet" hidden>
-                Удалить
-              </button>
+          <div id="legacyHistory">
+            <div class="history-head">
+              <p>
+              </p>
+              <div>
+                <button id="save" class="quiet" disabled>
+                  Текст ↓
+                </button>
+                <button id="saveJson" class="quiet" disabled>
+                  JSON ↓
+                </button>
+                <button id="deleteConversation" class="quiet" hidden>
+                  Удалить
+                </button>
+              </div>
+            </div>
+            <div id="history">
+              <p class="empty">
+                Здесь будут завершённые фразы.
+              </p>
             </div>
           </div>
-          <div id="history">
-            <p class="empty">
-              Здесь будут завершённые фразы.
-            </p>
+          <div id="library" hidden>
+            <div id="libraryListView">
+              <label class="sr-only" for="librarySearch">Поиск разговоров</label>
+              <input id="librarySearch" class="library-search" type="search" placeholder="Поиск разговоров" autocomplete="off">
+              <div id="libraryList" aria-live="polite"></div>
+            </div>
+            <div id="libraryDetail" hidden>
+              <button id="libraryBack" class="quiet">← Назад</button>
+              <h2 id="libraryTitle" class="library-title"></h2>
+              <div class="library-actions">
+                <button id="libraryContinue" class="quiet" hidden>Продолжить</button>
+                <button id="libraryRename" class="quiet">Переименовать</button>
+                <button id="libraryExport" class="quiet" aria-expanded="false" aria-controls="libraryExports">Экспорт</button>
+                <button id="libraryDelete" class="quiet">Удалить</button>
+              </div>
+              <form id="libraryRenameForm" class="library-rename" hidden>
+                <label for="libraryName">Название разговора</label>
+                <input id="libraryName" type="text" maxlength="120" autocomplete="off">
+                <div class="library-actions">
+                  <button id="libraryRenameSave" class="quiet" type="submit">Сохранить</button>
+                  <button id="libraryRenameCancel" class="quiet" type="button">Отмена</button>
+                </div>
+              </form>
+              <div id="libraryExports" class="library-actions" hidden>
+                <button id="libraryExportText" class="quiet">TXT ↓</button>
+                <button id="libraryExportJson" class="quiet">JSON ↓</button>
+              </div>
+              <p id="libraryActionError" role="status" hidden></p>
+              <div id="libraryMessages" class="message-list library-messages" aria-label="Сохранённые реплики"></div>
+            </div>
           </div>
         </section>
       </main>
-      <footer class="capture-bar">
+      <footer id="captureBar" class="capture-bar">
         <div class="capture-status">
           <meter id="meter" min="0" max="0.1" value="0" aria-label="Уровень микрофона">
           </meter>

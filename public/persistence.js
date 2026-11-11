@@ -28,7 +28,7 @@ function reportError() {
   status('Не удалось сохранить разговор');
 }
 
-async function request(path, method = 'GET', input) {
+export async function sessionRequest(path, method = 'GET', input) {
   const response = await fetch(path, {
     method,
     headers: {
@@ -42,7 +42,7 @@ async function request(path, method = 'GET', input) {
   return response.json();
 }
 
-function restoredTurn(turn) {
+export function restoredTurn(turn) {
   const record = { ...turn.extra, ...turn, final: true };
   delete record.extra;
   delete record.session_id;
@@ -72,7 +72,7 @@ export function initializePersistence() {
     const epoch = conversationEpoch;
     initialization = (async () => {
       try {
-        const result = await request('/api/sessions/active');
+        const result = await sessionRequest('/api/sessions/active');
         if (!enabled() || epoch !== conversationEpoch || !result.session)
           return;
         state.sessionId = result.session.id;
@@ -110,7 +110,7 @@ async function sessionFor(turn, epoch) {
   }
   const job = { epoch };
   creation = job;
-  job.promise = request('/api/sessions', 'POST', {
+  job.promise = sessionRequest('/api/sessions', 'POST', {
     kind: 'conversation',
     source_language: turn.source_language,
     target_language: turn.target_language
@@ -157,7 +157,7 @@ function saveTurn(event) {
         const input = Object.fromEntries(turnFields
           .filter(key => current[key] !== undefined)
           .map(key => [key, current[key]]));
-        await request(`/api/sessions/${sessionId}/turns/${id}`, 'PUT', input);
+        await sessionRequest(`/api/sessions/${sessionId}/turns/${id}`, 'PUT', input);
       }
     } catch {
       reportError();
@@ -172,7 +172,7 @@ for (const type of ['caption', 'translation', 'interlinear', 'speaker_assignment
 
 async function finishConversation(method) {
   if (closing)
-    return;
+    return false;
   closing = true;
   try {
     await initialization;
@@ -180,12 +180,14 @@ async function finishConversation(method) {
       await Promise.all([...pending.values()].map(job => job.promise));
     acceptingWrites = false;
     if (enabled() && state.sessionId)
-      await request(`/api/sessions/${state.sessionId}`, method, method === 'PATCH' ? { ended: true } : undefined);
+      await sessionRequest(`/api/sessions/${state.sessionId}`, method, method === 'PATCH' ? { ended: true } : undefined);
     conversationEpoch++;
     state.sessionId = null;
     clearConversation();
+    return true;
   } catch {
     reportError();
+    return false;
   } finally {
     acceptingWrites = true;
     closing = false;
@@ -208,4 +210,11 @@ export function deleteConversation() {
   if (!enabled() || !confirm('Удалить этот разговор с диска?'))
     return;
   return finishConversation('DELETE');
+}
+
+export async function removeSavedConversation(id) {
+  if (id === state.sessionId)
+    return finishConversation('DELETE');
+  await sessionRequest(`/api/sessions/${id}`, 'DELETE');
+  return true;
 }

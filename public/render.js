@@ -41,8 +41,7 @@ export function messengerBlocks(events) {
 }
 
 export function renderConversation() {
-  const mode = $('translationMode').value,
-    words = $('translationLayout').value === 'words';
+  const mode = $('translationMode').value;
   const feed = $('messageFeed'),
     list = $('messageList');
   const anchor = state.followConversation ? null : readingAnchor(feed);
@@ -52,26 +51,35 @@ export function renderConversation() {
     draft = steady ? all.filter(event => event.final === false).at(-1) : null;
   $('draftPanel').hidden = !draft || ($('showOriginal').value === 'hide' && mode !== 'off');
   $('draftText').textContent = draft ? draftTail(draft.text) : '';
-  const blocks = messengerBlocks(
-      all.filter(event => !steady || event.final !== false),
-      words && mode !== 'off'
-    ),
-    blockIds = new Set(blocks.map(block => block.id));
   $('emptyState').hidden = all.length > 0;
-  for (const [id, row] of state.messageRows)
+  renderMessages(all.filter(event => !steady || event.final !== false), list, state.messageRows);
+  $('translationNotice').hidden = true;
+  if (state.followConversation)
+    feed.scrollTop = feed.scrollHeight;
+  else
+    restoreReadingAnchor(feed, anchor);
+  $('jumpLatest').hidden = state.followConversation || !state.messages.size;
+}
+
+export function renderMessages(events, list, rows, { readOnly = false } = {}) {
+  const mode = readOnly ? 'always' : $('translationMode').value;
+  const words = $('translationLayout').value === 'words';
+  const blocks = messengerBlocks(events),
+    blockIds = new Set(blocks.map(block => block.id));
+  for (const [id, row] of rows)
     if (!blockIds.has(id)) {
       row.remove();
-      state.messageRows.delete(id);
+      rows.delete(id);
     }
   for (const [index, event] of blocks.entries()) {
     const previousSpeaker = index > 0 ? blocks[index - 1].speaker_id : undefined;
     const sameSpeaker = index > 0 && previousSpeaker === event.speaker_id;
-    let row = state.messageRows.get(event.id);
+    let row = rows.get(event.id);
     if (!row) {
       row = document.createElement('article');
       row.className = 'message';
       row.setAttribute('data-caption-id', event.id);
-      state.messageRows.set(event.id, row);
+      rows.set(event.id, row);
       list.append(row);
     } else
       list.appendChild?.(row); // Keep continuation bubbles in source order after resize.
@@ -132,7 +140,10 @@ export function renderConversation() {
     row.classList.toggle('self-message', event.speaker_id === 'self');
     const meta = document.createElement('div');
     meta.className = 'message-meta';
-    if (speakers) {
+    if (speakers && readOnly) {
+      meta.textContent = profile?.name || 'Участник';
+    }
+    if (speakers && !readOnly) {
       const picker = document.createElement('select');
       picker.className = 'speaker-picker';
       picker.setAttribute('aria-label', 'Участник этой реплики');
@@ -154,30 +165,34 @@ export function renderConversation() {
       };
       meta.append(picker);
     }
-    if (speakers)
+    if (speakers && (!readOnly || !sameSpeaker))
       row.append(meta);
     const interlinear =
       words &&
       mode !== 'off' &&
       event.source_language !== event.target_language &&
-      $('showOriginal').value !== 'hide';
+      (!readOnly || Boolean(event.glosses?.length)) &&
+      (readOnly || $('showOriginal').value !== 'hide');
     // In calm mode, commit the complete word layout once instead of resizing
     // it for every streamed meaning. Peek dialogs can still read ready words.
     const glossReady =
       event.demo || event.gloss_status === 'ready' || $('readingMode').value === 'live';
     const displayedGlosses =
       interlinear && glossReady && (visible || mode === 'peek')
-        ? validateGlosses(event.text, event.glosses)
+        ? validateGlosses(event.text, event.glosses, readOnly ? 300 : undefined)
         : [];
     const inlineHints = interlinear;
     const original = document.createElement('p');
     original.className = 'message-original';
-    if (interlinear)
+    if (interlinear || readOnly)
       renderAnnotated(original, event.text, displayedGlosses, event.target_language, {
-        concealed,
+        concealed: readOnly && !interlinear ? true : concealed,
+        maxGlossLength: readOnly ? 300 : undefined,
         selectedIndex: state.wordPeek?.id === event.id ? state.wordPeek.index : null,
         onPeek: (index, anchor) => {
-          if (mode === 'tap' && concealed)
+          if (readOnly)
+            peekWord(event.parts[0], index, anchor, true);
+          else if (mode === 'tap' && concealed)
             revealMessage(event);
           else
             peekWord(event.parts[0], (event.sourceOffset || 0) + index, anchor);
@@ -186,6 +201,7 @@ export function renderConversation() {
     else
       original.textContent = event.text;
     original.hidden =
+      !readOnly &&
       $('showOriginal').value === 'hide' &&
       mode !== 'off' &&
       event.source_language !== event.target_language;
@@ -215,7 +231,7 @@ export function renderConversation() {
                 off: 'Перевод по нажатию.'
               })[event.translation_status] || 'Перевод по нажатию.';
       }
-      if (!inlineHints && !concealed && (event.translation || event.translation_status !== 'error'))
+      if (!inlineHints && !concealed && (readOnly ? event.translation : event.translation || event.translation_status !== 'error'))
         row.append(translated);
       if (
         !inlineHints &&
@@ -233,6 +249,7 @@ export function renderConversation() {
       const actions = document.createElement('div');
       actions.className = 'message-actions';
       if (
+        !readOnly &&
         (mode !== 'peek' || event.translation_status === 'error') &&
         event.final !== false &&
         (!event.translation ||
@@ -268,6 +285,7 @@ export function renderConversation() {
         actions.append(button);
       }
       if (
+        !readOnly &&
         words &&
         visible &&
         event.translation &&
@@ -301,10 +319,4 @@ export function renderConversation() {
         row.append(actions);
     }
   }
-  $('translationNotice').hidden = true;
-  if (state.followConversation)
-    feed.scrollTop = feed.scrollHeight;
-  else
-    restoreReadingAnchor(feed, anchor);
-  $('jumpLatest').hidden = state.followConversation || !state.messages.size;
 }
