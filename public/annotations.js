@@ -54,6 +54,19 @@ export function compatibleSource(current, snapshot) {
     (current.startsWith(snapshot) && /\s/u.test(current[snapshot.length] || ''));
 }
 
+const appeared = new Set();
+
+// Animate a meaning or translation only the first time it is shown, so
+// re-rendering the feed does not make existing text blink.
+export function firstAppearance(key) {
+  if (appeared.has(key))
+    return false;
+  if (appeared.size > 5000)
+    appeared.clear();
+  appeared.add(key);
+  return true;
+}
+
 export function renderAnnotated(container, text, glosses, targetLanguage, options = {}) {
   container.replaceChildren();
   const spans = validateGlosses(text, glosses, options.maxGlossLength);
@@ -86,6 +99,8 @@ export function renderAnnotated(container, text, glosses, targetLanguage, option
     const meaning = document.createElement('button');
     meaning.type = 'button';
     meaning.className = 'word-meaning';
+    if (span && firstAppearance(`${options.animationKey ?? text}|${unit.index}|${span.meaning}`))
+      meaning.classList.add('appearing');
     meaning.textContent = span?.meaning || '';
     meaning.lang = targetLanguage;
     meaning.dir = 'auto';

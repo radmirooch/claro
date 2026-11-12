@@ -719,6 +719,9 @@ select option {
   white-space: normal;
   overflow-wrap: anywhere;
   text-wrap: balance;
+}
+
+.word-meaning.appearing {
   animation: meaning-in var(--motion-meaning) var(--ease-out) both;
 }
 
@@ -779,6 +782,9 @@ select option {
   letter-spacing: -.005em;
   color: var(--accent-ink);
   overflow-wrap: anywhere;
+}
+
+.message-translation.appearing {
   animation: meaning-in var(--motion-meaning) var(--ease-out);
 }
 

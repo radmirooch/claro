@@ -1704,3 +1704,28 @@ test('leaving cards during a review request ignores its late response without re
   await h.element('cardsTab').onclick();
   assert.equal(h.element('cardsFinished').hidden, false);
 });
+
+test('re-rendering the feed does not replay the appearance animation of shown translations', async () => {
+  const h = await harness();
+  h.run(`show({id:'calm', text:'Una frase.', translation:'Одна фраза.', translation_status:'ready', source_language:'es', target_language:'ru', final:true}, false)`);
+  const translation = () => h.element('messageList').children[0].children.find(node => (node.className || '').includes('message-translation'));
+  assert.ok(translation().className.includes('appearing'));
+  h.element('translationLayout').value = 'words';
+  h.run('renderConversation()');
+  h.element('translationLayout').value = 'line';
+  h.run('renderConversation()');
+  assert.equal(translation().className.includes('appearing'), false);
+  assert.equal(translation().textContent, 'Одна фраза.');
+});
+
+test('empty conversation offers tab listening and opens Watch', async () => {
+  const fixture = displayFixture();
+  const h = await harness({getDisplayMedia:fixture.getDisplayMedia});
+  h.run('renderConversation()');
+  assert.equal(h.element('emptyWatch').hidden, false);
+  h.element('emptyWatch').onclick();
+  assert.equal(h.run('state.panel'), 'watch');
+  assert.equal(h.element('watchTab').attributes['aria-pressed'], 'true');
+  h.run('renderConversation()');
+  assert.equal(h.element('emptyWatch').hidden, true);
+});

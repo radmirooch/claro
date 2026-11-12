@@ -112,6 +112,7 @@ $('engine').onchange = () => {
 $('listen').onclick = () => start({ source: 'mic' });
 $('translationMode').onchange = translationModeChanged;
 $('demo').onclick = showDemo;
+$('emptyWatch').onclick = () => setPanel('watch');
 $('copySetup').onclick = async () => {
   try {
     await navigator.clipboard.writeText('npm run setup');

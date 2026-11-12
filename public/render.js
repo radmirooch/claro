@@ -1,7 +1,7 @@
 import { recognitionMissing } from './readiness.js';
 import { state } from './state.js';
 import { $, setLanguage } from './dom.js';
-import { renderAnnotated, validateGlosses } from './annotations.js';
+import { firstAppearance, renderAnnotated, validateGlosses } from './annotations.js';
 import { draftTail } from './reading.js';
 import { assignSpeaker } from './participants.js';
 import { renderHistory, peekWord, revealMessage } from './render-history.js';
@@ -61,6 +61,8 @@ export function renderConversation() {
     ? 'Выберите, что смотреть'
     : modelsMissing ? 'Модели не установлены' : 'Начните разговор';
   $('demo').hidden = viewingWatch;
+  // The conversation listens to the microphone; offer the tab source next to it.
+  $('emptyWatch').hidden = viewingWatch || $('watchTab').hidden || $('watchTab').disabled;
   $('setupHelp').hidden = !modelsMissing;
   renderMessages(all.filter(event => !steady || event.final !== false), list, state.messageRows);
   $('translationNotice').textContent = 'Перевод недоступен';
@@ -199,6 +201,7 @@ export function renderMessages(events, list, rows, { readOnly = false, compact =
     original.className = 'message-original';
     renderAnnotated(original, event.text, interlinear ? displayedGlosses : event.glosses, event.target_language, {
       phraseLayout: !interlinear,
+      animationKey: event.id,
       concealed: !interlinear || concealed,
       maxGlossLength: readOnly ? 300 : undefined,
       selectedIndex: state.wordPeek?.id === event.id ? state.wordPeek.index : null,
@@ -226,6 +229,8 @@ export function renderMessages(events, list, rows, { readOnly = false, compact =
       const translated = document.createElement('p');
       translated.className = 'message-translation';
       if (event.translation && visible) {
+        if (firstAppearance(`translation|${event.id}|${event.translation}`))
+          translated.classList.add('appearing');
         translated.textContent = event.translation;
         setLanguage(translated, event.target_language);
       } else {
