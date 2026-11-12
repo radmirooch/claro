@@ -1356,6 +1356,18 @@ test('microphone and display encode identical PCM through the same worklet path'
   display.run('stop()');
 });
 
+test('display capture starts when the browser rejects audio constraints', async () => {
+  const fixture = displayFixture();
+  fixture.audioTrack.applyConstraints = async () => {
+    throw Object.assign(new Error('Invalid state'), { name: 'InvalidStateError' });
+  };
+  const h = await harness({getDisplayMedia:fixture.getDisplayMedia});
+  await h.run("start({source:'display'})");
+  assert.equal(h.run('running'), true);
+  assert.equal(h.run('state.watchError'), '');
+  h.run('stop()');
+});
+
 test('ending a selected display track during initialization cannot restart capture', async () => {
   const fixture = displayFixture();
   let releaseConstraints;

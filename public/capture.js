@@ -211,8 +211,9 @@ export async function start({ source = 'mic' } = {}) {
       if (epoch === state.generation)
         stop();
     };
+    // Chrome rejects constraint changes on tab audio; the request already asks for raw sound.
     if (source === 'display')
-      await audioTrack.applyConstraints?.({ echoCancellation: false, noiseSuppression: false });
+      await audioTrack.applyConstraints?.({ echoCancellation: false, noiseSuppression: false }).catch(() => {});
     await initializePersistence();
     const kind = source === 'display' ? 'watch' : 'conversation';
     if (epoch !== state.generation)
